@@ -1,0 +1,6 @@
+@JaliscoProblemsAPI_HostAddress = http://localhost:5195
+
+GET {{JaliscoProblemsAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
