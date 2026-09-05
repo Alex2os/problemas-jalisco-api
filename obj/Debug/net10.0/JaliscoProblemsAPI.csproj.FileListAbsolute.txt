@@ -53,7 +53,6 @@ C:/Users/imale/OneDrive/Escritorio/Coding Projects/JaliscoProblemsAPI/obj/Debug/
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/JaliscoProblemsAPI.runtimeconfig.json
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/JaliscoProblemsAPI.dll
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/JaliscoProblemsAPI.pdb
-/home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/BCrypt.Net-Next.dll
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/Microsoft.AspNetCore.Authentication.JwtBearer.dll
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/Microsoft.AspNetCore.OpenApi.dll
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/Microsoft.IdentityModel.Abstractions.dll
@@ -92,3 +91,5 @@ C:/Users/imale/OneDrive/Escritorio/Coding Projects/JaliscoProblemsAPI/obj/Debug/
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/obj/Debug/net10.0/JaliscoProblemsAPI.pdb
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/obj/Debug/net10.0/JaliscoProblemsAPI.genruntimeconfig.cache
 /home/alex1ne/Desktop/Coding projects/jalisco-problems-api/obj/Debug/net10.0/ref/JaliscoProblemsAPI.dll
+/home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/BCrypt-Net-Next.dll
+/home/alex1ne/Desktop/Coding projects/jalisco-problems-api/bin/Debug/net10.0/Microsoft.Bcl.Cryptography.dll
