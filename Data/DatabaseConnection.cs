@@ -15,7 +15,6 @@ public class DBConnection
         connection_string.Database = Environment.GetEnvironmentVariable("DB_DATABASE");
         connection_string.Port = int.Parse(Environment.GetEnvironmentVariable("DB_PORT"));
 
-
         NpgsqlConnection Connection = new NpgsqlConnection(connection_string.ConnectionString);
 
         try

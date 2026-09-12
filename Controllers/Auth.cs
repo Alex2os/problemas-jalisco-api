@@ -12,7 +12,6 @@ namespace JaliscoProblemsAPI.Controllers
 
     public class AuthController : ControllerBase
     {
-
         private UserRepository _UserRepository; // as the same as UserRepository, this variable is got from Program.cs, in this case UserRepository is scoped and not singleton like the database.
         private PasswordService _PasswordService; // variable got from program.cs. used for the password service.
         private TokenService _TokenService; // token service is another scoped class in the program.cs which we can receive here.
@@ -48,6 +47,7 @@ namespace JaliscoProblemsAPI.Controllers
 
                 User user = new User
                 {
+                    
                     Username = request.Username,
                     Email = request.Email,
                     PasswordHash = hashed_user_password,
@@ -62,9 +62,6 @@ namespace JaliscoProblemsAPI.Controllers
             else if (email_exists) return Conflict(new { message = "El email ya existe.", });
             // for anything else (which is when the username already exists) we return a conflict saying that the username already exists.
             else return Conflict(new { message = "El nombre de usuario ya existe", });
-
-
-
         }
 
         // with the login function we check first if the user inserted a valid email checking in the database. then we obtain that user, and we check the hashed password-
@@ -106,7 +103,6 @@ namespace JaliscoProblemsAPI.Controllers
 
             // otherwise we return an unauthorized response.
             else return Unauthorized(new { message = "Los datos introducidos no son correctos." });
-
 
         }
 
