@@ -2,6 +2,8 @@ using Npgsql;
 using JaliscoProblemsAPI.Data.DataBaseConnection;
 using JaliscoProblemsAPI.Models.ReportWithUsername;
 using JaliscoProblemsAPI.Models.Report;
+using System.Net.Http;
+using System.Text.Json;
 
 
 namespace JaliscoProblemsAPI.Data.ReportRepository;
@@ -21,14 +23,18 @@ public class ReportRepository
 
         try
         {
-            string sql_query = "INSERT INTO reports (marker_longitude, marker_latitude, description, report_type, user_id) VALUES (@marker_longitude, @marker_latitude, @description, @report_type, @user_id)";
+            string sql_query = "INSERT INTO reports (longitude, latitude, ubication, description, type, user_id) VALUES (@longitude, @latitude, @ubication, @description, @type, @user_id)";
 
             var command = new NpgsqlCommand(sql_query, _DBConnection);
 
-            command.Parameters.AddWithValue("@marker_longitude", report.marker_longitude);
-            command.Parameters.AddWithValue("@marker_latitude", report.marker_latitude);
+            // we obtain the ubication for the report
+            string? ubication = await ObtainReportUbication(report.latitude, report.longitude);
+
+            command.Parameters.AddWithValue("@longitude", report.longitude);
+            command.Parameters.AddWithValue("@latitude", report.latitude);
+            command.Parameters.AddWithValue("@ubication", ubication);
             command.Parameters.AddWithValue("@description", report.description);
-            command.Parameters.AddWithValue("@report_type", report.report_type);
+            command.Parameters.AddWithValue("@type", report.type);
             command.Parameters.AddWithValue("@user_id", report.user_id);
 
             var result = await command.ExecuteNonQueryAsync();
@@ -50,7 +56,7 @@ public class ReportRepository
 
             // we obtain both the report info and the username using this sql join query.
             string sql_query = @"SELECT 
-            r.id, r.marker_longitude, r.marker_latitude, r.description, r.report_type, r.created_at, r.user_id, u.username 
+            r.id, r.longitude, r.latitude, r.ubication, r.description, r.type, r.created_at, r.user_id, u.username 
             FROM reports r JOIN users u ON r.user_id = u.id";
 
             var command = new NpgsqlCommand(sql_query, _DBConnection);
@@ -60,28 +66,57 @@ public class ReportRepository
             while (reader.Read())
             {
 
-                ReportWithUsername report = new ReportWithUsername();
-
-                // for now we dont use the first column (0) because we dont want to use the reportid. maybe in the future it would be good to include this.
-                report.id = reader.GetInt32(0);
-                report.marker_longitude = reader.GetDouble(1);
-                report.marker_latitude = reader.GetDouble(2);
-                report.description = reader.GetString(3);
-                report.report_type = reader.GetString(4);
-                report.created_at = reader.GetDateTime(5);
-                report.user_id = reader.GetInt32(6);
-                report.username = reader.GetString(7);
+                // we create a new report using the model reportwithusername, so we can include who made the report.
+                ReportWithUsername report = new ReportWithUsername
+                {
+                    id = reader.GetInt32(0),
+                    longitude = reader.GetDouble(1),
+                    latitude = reader.GetDouble(2),
+                    ubication = reader.GetString(3),
+                    description = reader.GetString(4),
+                    type = reader.GetString(5),
+                    created_at = reader.GetDateTime(6),
+                    user_id = reader.GetInt32(7),
+                    username = reader.GetString(8)
+                };
 
                 // we add the report to the end of the list.
                 reports_found.Add(report);
-
             }
 
             return reports_found;
 
-
         }
-        catch (Exception ex){throw new Exception("Hubo un error obteniendo los reportes.", ex);}
-    
+        catch (Exception ex) { throw new Exception("Hubo un error obteniendo los reportes.", ex); }
+
+    }
+
+    // function to obtain the actual ubication of the report based on latitude and longitude
+    public async Task<string?> ObtainReportUbication(double latitude, double longitude)
+    {
+        // as we obtain the ubication through an api, we need to make http calls to it. we first declare a client and specify the useragent below.
+        HttpClient client = new HttpClient();
+
+        // user agent is the api/application itself, the one that is making the call
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("ProblemasJaliscoAPI/1.0");
+
+        // we make our string for the url of the api we are calling. we specify the latitude and longitude inside the url.
+        string url = $"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&addressdetails=1";
+
+        // we send the request or call here. with GetAsync we specify that it's an asynchronous operation (async).
+        HttpResponseMessage response = await client.GetAsync(url);
+
+        // we then check the success status code. if the response was not correct, we return null.
+        if (!response.IsSuccessStatusCode) return null;
+
+        // if everything went correct we can obtain the json as a string first
+        string json_string = await response.Content.ReadAsStringAsync();
+
+        // we then can obtain the json document itself
+        JsonDocument json = JsonDocument.Parse(json_string);
+
+        // finally we can return the json. in this case we specify that we are returning the "display_name" property of the json itself.
+        // root element helps us to obtain the rootelement of the json, then we can obtain the property and turn it into string.
+        return json.RootElement.GetProperty("display_name").ToString();
     }
 }

@@ -56,10 +56,10 @@ namespace JaliscoProblemsAPI.Controllers
             Report report = new Report
             {
                 user_id = user_id_integer,
-                marker_latitude = request.Latitude,
-                marker_longitude = request.Longitude,
-                description = request.Description,
-                report_type = request.ReportType,
+                latitude = request.latitude,
+                longitude = request.longitude,
+                description = request.description,
+                type = request.type,
             };
 
             // we await for the function to create the report
