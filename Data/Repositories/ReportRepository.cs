@@ -48,6 +48,7 @@ public class ReportRepository
         try
         {
 
+            // we obtain both the report info and the username using this sql join query.
             string sql_query = @"SELECT 
             r.id, r.marker_longitude, r.marker_latitude, r.description, r.report_type, r.created_at, r.user_id, u.username 
             FROM reports r JOIN users u ON r.user_id = u.id";
