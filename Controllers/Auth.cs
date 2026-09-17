@@ -48,9 +48,9 @@ namespace JaliscoProblemsAPI.Controllers
                 User user = new User
                 {
                     
-                    Username = request.Username,
-                    Email = request.Email,
-                    PasswordHash = hashed_user_password,
+                    username = request.Username,
+                    email = request.Email,
+                    passwordhash = hashed_user_password,
 
                 };
 
@@ -79,7 +79,7 @@ namespace JaliscoProblemsAPI.Controllers
             User user = await _UserRepository.GetUser(request.Email);
 
             // we check the hashed password from the user against the request.Password and save it on a bool variable to check
-            bool password_hash_check = _PasswordService.CheckHashedPassword(request.Password, user.PasswordHash);
+            bool password_hash_check = _PasswordService.CheckHashedPassword(request.Password, user.passwordhash);
 
             if (email_exists && password_hash_check) // if the request passed all filters, then we allow the login
             {
@@ -94,9 +94,9 @@ namespace JaliscoProblemsAPI.Controllers
                     token = token,
                     user = new
                     {
-                        id = user.ID,
-                        username = user.Username,
-                        email = user.Email
+                        id = user.id,
+                        username = user.username,
+                        email = user.email
                     }
                 });
             }

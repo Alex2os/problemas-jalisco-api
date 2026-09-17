@@ -55,11 +55,11 @@ namespace JaliscoProblemsAPI.Controllers
             // we create a new report object with the required data to be sent to the CreateReport function in the ReportRepository
             Report report = new Report
             {
-                UserID = user_id_integer,
-                MarkerLatitude = request.Latitude,
-                MarkerLongitude = request.Longitude,
-                Description = request.Description,
-                ReportType = request.ReportType,
+                user_id = user_id_integer,
+                marker_latitude = request.Latitude,
+                marker_longitude = request.Longitude,
+                description = request.Description,
+                report_type = request.ReportType,
             };
 
             // we await for the function to create the report

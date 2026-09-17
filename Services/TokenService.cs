@@ -35,9 +35,9 @@ public class TokenService
         // we create a new list that contains Claims, so in this case we add some useful information about the user in this case.
         var claims = new List<Claim>
         {
-            new Claim("user_id", user.ID.ToString()), // each claim has a key-value structure, like we can see here, but we can only put strings on both.
-            new Claim("user_email", user.Email),
-            new Claim("username", user.Username),
+            new Claim("user_id", user.id.ToString()), // each claim has a key-value structure, like we can see here, but we can only put strings on both.
+            new Claim("user_email", user.email),
+            new Claim("username", user.username),
 
         };
 

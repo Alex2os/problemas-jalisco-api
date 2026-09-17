@@ -4,9 +4,9 @@ namespace JaliscoProblemsAPI.Models.User;
 
 public class User()
 {
-    public int ID {get; set; } = 0;
-    public string Email {get; set; } = string.Empty;
-    public string PasswordHash {get; set; } = string.Empty;
-    public string Username {get; set;} = string.Empty;
+    public int id {get; set; } = 0;
+    public string email {get; set; } = string.Empty;
+    public string passwordhash {get; set; } = string.Empty;
+    public string username {get; set;} = string.Empty;
 
 }

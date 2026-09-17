@@ -85,9 +85,9 @@ public class UserRepository
 
             var command = new NpgsqlCommand(sql_query, _DBConnection);
             // we replace the @'s with the user attributes or values. we need multiple of the .AddWithValue to add multiple things.
-            command.Parameters.AddWithValue("@username", user.Username);
-            command.Parameters.AddWithValue("@email", user.Email);
-            command.Parameters.AddWithValue("@passwordhash", user.PasswordHash);
+            command.Parameters.AddWithValue("@username", user.username);
+            command.Parameters.AddWithValue("@email", user.email);
+            command.Parameters.AddWithValue("@passwordhash", user.passwordhash);
 
             var result = await command.ExecuteNonQueryAsync(); // this executes the query and returns the number of rows affected.
 
@@ -120,10 +120,10 @@ public class UserRepository
             {
 
                 // the numbers in the (1), (2) and (3) are the columns in this case. the reader returns each row.
-                user_obtained.ID = reader.GetInt32(0);
-                user_obtained.Username = reader.GetString(1);
-                user_obtained.Email = reader.GetString(2);
-                user_obtained.PasswordHash = reader.GetString(3);
+                user_obtained.id = reader.GetInt32(0);
+                user_obtained.username = reader.GetString(1);
+                user_obtained.email = reader.GetString(2);
+                user_obtained.passwordhash = reader.GetString(3);
 
             }
 
