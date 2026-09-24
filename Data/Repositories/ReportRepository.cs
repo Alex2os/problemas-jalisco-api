@@ -46,8 +46,57 @@ public class ReportRepository
         }
     }
 
+    public async Task<List<ReportWithUsername>> GetFilteredReports(string query)
+    {
+        List<ReportWithUsername> reports_found = new List<ReportWithUsername>();
+
+        try
+        {
+
+            // in this case it's the same query as the getallreports, but now we include the ilike part, that part being the query that is sent to this function.
+            // we use the %% to specify that we want to find the registers or reports that contain that query anywhere.
+            string sql_query = @"SELECT 
+            r.id, r.longitude, r.latitude, r.ubication, r.description, r.type, r.created_at, r.user_id, u.username 
+            FROM reports r JOIN users u ON r.user_id = u.id WHERE r.ubication ILIKE @query ORDER BY r.id DESC";
+
+            var command = new NpgsqlCommand(sql_query, _DBConnection);
+            command.Parameters.AddWithValue("@query", $"%{query}%"); // we have to do this in order for the ilike query to go right, as there's some weird -
+            // behavior with this specifically. we specify the the string, then the % operators for the query, and then the query itself. with this,-
+            // this works properly with the ilike.
+
+            var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+
+                ReportWithUsername report = new ReportWithUsername
+                {
+                    id = reader.GetInt32(0),
+                    longitude = reader.GetDouble(1),
+                    latitude = reader.GetDouble(2),
+                    ubication = reader.GetString(3),
+                    description = reader.GetString(4),
+                    type = reader.GetString(5),
+                    created_at = reader.GetDateTime(6),
+                    user_id = reader.GetInt32(7),
+                    username = reader.GetString(8)
+                };
+
+                reports_found.Add(report);
+            }
+
+            return reports_found;
+
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("Hubo un error obteniendo los reportes filtrados.", ex);
+        }
+
+    }
+
     // this function returns all the reports in the database.
-    public async Task<List<ReportWithUsername>> GetReports()
+    public async Task<List<ReportWithUsername>> GetAllReports()
     {
         List<ReportWithUsername> reports_found = new List<ReportWithUsername>();
 
@@ -55,9 +104,11 @@ public class ReportRepository
         {
 
             // we obtain both the report info and the username using this sql join query.
+            // we obtain the reports by desc based on the reports id column, so we obtain first the latest reports done. this is so for example in the reports-
+            // page, we obtain the latest reports first instead of the first ones made.
             string sql_query = @"SELECT 
             r.id, r.longitude, r.latitude, r.ubication, r.description, r.type, r.created_at, r.user_id, u.username 
-            FROM reports r JOIN users u ON r.user_id = u.id";
+            FROM reports r JOIN users u ON r.user_id = u.id ORDER BY r.id DESC";
 
             var command = new NpgsqlCommand(sql_query, _DBConnection);
 
@@ -87,7 +138,7 @@ public class ReportRepository
             return reports_found;
 
         }
-        catch (Exception ex) { throw new Exception("Hubo un error obteniendo los reportes.", ex); }
+        catch (Exception ex) { throw new Exception("Hubo un error obteniendo todos los reportes.", ex); }
 
     }
 

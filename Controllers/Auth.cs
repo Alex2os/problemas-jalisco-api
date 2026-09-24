@@ -8,7 +8,7 @@ using JaliscoProblemsAPI.Services.TokenService;
 namespace JaliscoProblemsAPI.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("[controller]/")]
 
     public class AuthController : ControllerBase
     {

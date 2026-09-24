@@ -9,7 +9,7 @@ using JaliscoProblemsAPI.Models.Report;
 namespace JaliscoProblemsAPI.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("[controller]/")]
 
     public class ReportsController : ControllerBase
     {
@@ -28,7 +28,7 @@ namespace JaliscoProblemsAPI.Controllers
         // in the authorization header, if we are working from the frontend we should send it as a header as the following:
         // Authorization: Bearer TOKEN
         // so basically we have to keep the token in the client to make requests to the backend that require authentication/authorization.
-        [HttpPost("createreport")]
+        [HttpPost("create")]
         public async Task<IActionResult> CreateReport([FromBody] CreateReportRequestDTO request)
         {
 
@@ -71,15 +71,29 @@ namespace JaliscoProblemsAPI.Controllers
 
         }
 
-        [HttpGet("getallreports")]
+        // this will respond to just /reports, as we don't specify a name here.
+        [HttpGet]
         public async Task<IActionResult> GetAllReports()
         {
 
-            var reports = await _ReportRepository.GetReports();
+            var reports = await _ReportRepository.GetAllReports();
             
             return Ok(new
             {
                 message = "Los reportes se obtuvieron con exito.",
+                reports = reports,
+            });
+        }
+
+        [HttpGet("search")]
+        public async Task<IActionResult> GetFilteredReports([FromQuery] string query)
+        {
+
+            var reports = await _ReportRepository.GetFilteredReports(query);
+            
+            return Ok(new
+            {
+                message = "Los reportes filtrados se obtuvieron con exito.",
                 reports = reports,
             });
         }
