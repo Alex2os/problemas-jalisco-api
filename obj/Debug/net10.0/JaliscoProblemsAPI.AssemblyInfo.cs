@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("JaliscoProblemsAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bdb274d40a4f831ce55823d448f5434611be36eb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+fbf488c2229445ce78617152028de91eaa289c86")]
 [assembly: System.Reflection.AssemblyProductAttribute("JaliscoProblemsAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("JaliscoProblemsAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

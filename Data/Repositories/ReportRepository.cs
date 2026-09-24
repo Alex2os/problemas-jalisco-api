@@ -143,12 +143,14 @@ public class ReportRepository
 
     }
 
-    public async Task<List<ReportWithUsername>> GetReportById(int report_id)
+    public async Task<ReportWithUsername> GetReportById(int report_id)
     {
 
         try
         {
-            List<ReportWithUsername> report_found = new List<ReportWithUsername>();
+            // seems like we can just return this and it will be converted to json, so here there's no need to return a list containing the object,
+            // as we are returning an Ok in the controller, so c# does the serialization for us, converting the object to json automatically.
+            ReportWithUsername report_found = new ReportWithUsername();
 
             // pretty similar query to get all reports, but we include an AND condition where the report id must match the id sent.
             string sql_query = @"SELECT 
@@ -164,20 +166,15 @@ public class ReportRepository
             while (reader.Read())
             {
 
-                ReportWithUsername report = new ReportWithUsername
-                {
-                    id = reader.GetInt32(0),
-                    longitude = reader.GetDouble(1),
-                    latitude = reader.GetDouble(2),
-                    ubication = reader.GetString(3),
-                    description = reader.GetString(4),
-                    type = reader.GetString(5),
-                    created_at = reader.GetDateTime(6),
-                    user_id = reader.GetInt32(7),
-                    username = reader.GetString(8)
-                };
-
-                report_found.Add(report);
+                report_found.id = reader.GetInt32(0);
+                report_found.longitude = reader.GetDouble(1);
+                report_found.latitude = reader.GetDouble(2);
+                report_found.ubication = reader.GetString(3);
+                report_found.description = reader.GetString(4);
+                report_found.type = reader.GetString(5);
+                report_found.created_at = reader.GetDateTime(6);
+                report_found.user_id = reader.GetInt32(7);
+                report_found.username = reader.GetString(8);
 
             }
 
