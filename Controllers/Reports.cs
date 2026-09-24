@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
-using JaliscoProblemsAPI.DTOs.Reports;
 using Microsoft.AspNetCore.Authorization; // we use this to add the Authorize attribute.
+using JaliscoProblemsAPI.DTOs.Reports;
+using JaliscoProblemsAPI.DTOs.Reports.Comment;
 using JaliscoProblemsAPI.Data.ReportRepository;
-
-// models
+using JaliscoProblemsAPI.Models.Report.Comment;
 using JaliscoProblemsAPI.Models.Report;
+
 
 namespace JaliscoProblemsAPI.Controllers
 {
@@ -96,6 +97,32 @@ namespace JaliscoProblemsAPI.Controllers
                 message = "Los reportes filtrados se obtuvieron con exito.",
                 reports = reports,
             });
+        }
+
+        [Authorize]
+        [HttpPost("{report_id}/comments")]
+        public async Task<IActionResult> CreateComment(int report_id, [FromBody] CreateCommentRequestDTO request)
+        {
+
+            string? user_id = User.FindFirst("user_id")?.Value;
+            if (!int.TryParse(user_id, out int user_id_integer)) return Unauthorized(new { message = "El usuario no esta autenticado." });
+
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            Comment comment = new Comment
+            {
+                user_id = user_id_integer,
+                report_id = report_id,
+                user_comment = request.user_comment,
+            };
+
+            await _ReportRepository.CreateComment(comment);  
+
+            return Ok(new
+            {
+                message = "Se creo el comentario con exito.",
+            });
+
         }
 
     }

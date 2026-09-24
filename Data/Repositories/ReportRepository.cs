@@ -1,9 +1,10 @@
 using Npgsql;
+using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using JaliscoProblemsAPI.Data.DataBaseConnection;
 using JaliscoProblemsAPI.Models.ReportWithUsername;
+using JaliscoProblemsAPI.Models.Report.Comment;
 using JaliscoProblemsAPI.Models.Report;
-using System.Net.Http;
-using System.Text.Json;
 
 
 namespace JaliscoProblemsAPI.Data.ReportRepository;
@@ -169,5 +170,28 @@ public class ReportRepository
         // finally we can return the json. in this case we specify that we are returning the "display_name" property of the json itself.
         // root element helps us to obtain the rootelement of the json, then we can obtain the property and turn it into string.
         return json.RootElement.GetProperty("display_name").ToString();
+    }
+
+    public async Task CreateComment(Comment comment)
+    {
+
+        try
+        {
+            string sql_query = "INSERT INTO comments(user_id, report_id, user_comment) VALUES(@user_id, @report_id, @comment)";
+
+            var command = new NpgsqlCommand(sql_query, _DBConnection);
+
+            command.Parameters.AddWithValue("@user_id", comment.user_id);
+            command.Parameters.AddWithValue("@report_id", comment.report_id);
+            command.Parameters.AddWithValue("@comment", comment.user_comment);
+
+            var result = await command.ExecuteNonQueryAsync();
+
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("No se pudo crear el comentario", ex);
+        }
+
     }
 }
