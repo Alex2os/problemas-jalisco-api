@@ -72,7 +72,21 @@ namespace JaliscoProblemsAPI.Controllers
 
         }
 
-        // this will respond to just /reports, as we don't specify a name here.
+        [HttpGet("{report_id}")]
+        public async Task<IActionResult> GetReportById(int report_id)
+        {
+
+            var report = await _ReportRepository.GetReportById(report_id);
+
+            return Ok (new
+            {
+                message = "El reporte se obtuvo con éxito",
+                report = report,
+            });
+
+        }
+
+        // this will respond to just /reports, as we don't specify a name here. we obtain all reports
         [HttpGet]
         public async Task<IActionResult> GetAllReports()
         {

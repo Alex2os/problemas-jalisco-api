@@ -143,6 +143,53 @@ public class ReportRepository
 
     }
 
+    public async Task<List<ReportWithUsername>> GetReportById(int report_id)
+    {
+
+        try
+        {
+            List<ReportWithUsername> report_found = new List<ReportWithUsername>();
+
+            // pretty similar query to get all reports, but we include an AND condition where the report id must match the id sent.
+            string sql_query = @"SELECT 
+            r.id, r.longitude, r.latitude, r.ubication, r.description, r.type, r.created_at, r.user_id, u.username 
+            FROM reports r JOIN users u ON r.user_id = u.id AND r.id = @report_id";
+
+            var command = new NpgsqlCommand(sql_query, _DBConnection);
+
+            command.Parameters.AddWithValue("@report_id", report_id);
+
+            var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+
+                ReportWithUsername report = new ReportWithUsername
+                {
+                    id = reader.GetInt32(0),
+                    longitude = reader.GetDouble(1),
+                    latitude = reader.GetDouble(2),
+                    ubication = reader.GetString(3),
+                    description = reader.GetString(4),
+                    type = reader.GetString(5),
+                    created_at = reader.GetDateTime(6),
+                    user_id = reader.GetInt32(7),
+                    username = reader.GetString(8)
+                };
+
+                report_found.Add(report);
+
+            }
+
+            return report_found;
+
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("No se pudo obtener el reporte por su id.", ex);
+        }
+    }
+
     // function to obtain the actual ubication of the report based on latitude and longitude
     public async Task<string?> ObtainReportUbication(double latitude, double longitude)
     {
