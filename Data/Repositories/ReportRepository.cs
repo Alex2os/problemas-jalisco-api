@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using JaliscoProblemsAPI.Data.DataBaseConnection;
 using JaliscoProblemsAPI.Models.ReportWithUsername;
+using JaliscoProblemsAPI.Models.Report.CommentWithUsername;
 using JaliscoProblemsAPI.Models.Report.Comment;
 using JaliscoProblemsAPI.Models.Report;
 
@@ -237,5 +238,50 @@ public class ReportRepository
             throw new Exception("No se pudo crear el comentario", ex);
         }
 
+    }
+
+    public async Task<List<CommentWithUsername>> ObtainCommentsByReportId(int report_id)
+    {
+
+        List<CommentWithUsername> comments_obtained = new List<CommentWithUsername>();
+
+        try
+        {
+            // a query to obtain id, user_id, report_id, user_comment, created_at and the username associated to a comment.
+            // in this case we use a join for the comments and the users, and we just specify that we want the comment id to match the report_id, which is already sent to this function.
+            string sql_query = @"SELECT c.id, c.user_id, c.report_id, c.user_comment, c.created_at, u.username FROM comments c 
+            JOIN users u ON u.id = c.user_id AND c.id = @report_id";
+
+            var command = new NpgsqlCommand(sql_query, _DBConnection);
+
+            command.Parameters.AddWithValue("@report_id", report_id);
+
+            var reader = command.ExecuteReader();
+
+            while (reader.Read())
+            {
+
+                CommentWithUsername comment = new CommentWithUsername
+                {
+                    id = reader.GetInt32(0),
+                    user_id = reader.GetInt32(1),
+                    report_id = reader.GetInt32(2),
+                    user_comment = reader.GetString(3),
+                    created_at = reader.GetDateTime(4),
+                    username = reader.GetString(5),
+                };
+
+                comments_obtained.Add(comment);
+
+            }
+
+            return comments_obtained;
+
+        }
+        catch (Exception ex)
+        {
+            throw new Exception("No se pudieron obtener los comentarios por el id.", ex);
+        }
+        
     }
 }

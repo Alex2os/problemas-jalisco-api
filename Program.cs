@@ -17,7 +17,7 @@ builder.Services.AddOpenApi();
 
 builder.Services.AddControllers();
 
-builder.Services.AddSingleton<DBConnection>(); // a singleton is used like a copy for the whole app or program
+builder.Services.AddScoped<DBConnection>(); // a singleton is used like a copy for the whole app or program. however, it's better to give a different connection each time a request is made, thats why we use scoped here too.
 builder.Services.AddScoped<UserRepository>(); // a scoped is a copy for each instance, so for each request, then discards it after used.
 builder.Services.AddScoped<PasswordService>();
 builder.Services.AddScoped<TokenService>();

@@ -72,6 +72,7 @@ namespace JaliscoProblemsAPI.Controllers
 
         }
 
+        // in the case we are sending parameters through the url, we can obtain them declaring a variable, like int report_id in this case.
         [HttpGet("{report_id}")]
         public async Task<IActionResult> GetReportById(int report_id)
         {
@@ -113,6 +114,7 @@ namespace JaliscoProblemsAPI.Controllers
             });
         }
 
+        // remember that when using post it means we are creating something. when it's get, we are obtaining something.
         [Authorize]
         [HttpPost("{report_id}/comments")]
         public async Task<IActionResult> CreateComment(int report_id, [FromBody] CreateCommentRequestDTO request)
@@ -135,6 +137,20 @@ namespace JaliscoProblemsAPI.Controllers
             return Ok(new
             {
                 message = "Se creo el comentario con exito.",
+            });
+        }
+
+
+        [HttpGet("{report_id}/comments")]
+        public async Task<IActionResult> ObtainCommentsByReportId(int report_id)
+        {
+
+            var comments = await _ReportRepository.ObtainCommentsByReportId(report_id);
+
+            return Ok(new
+            {
+                message = "Los comentarios se obtuvieron con exito mediante el id.",
+                comments = comments,
             });
 
         }
