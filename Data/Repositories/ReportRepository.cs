@@ -248,9 +248,13 @@ public class ReportRepository
         try
         {
             // a query to obtain id, user_id, report_id, user_comment, created_at and the username associated to a comment.
-            // in this case we use a join for the comments and the users, and we just specify that we want the comment id to match the report_id, which is already sent to this function.
+            // in this case we use a join for the comments and the users, then another join for the reports table, 
+            // and we just specify that we want the comment id to match the report_id, which is already sent to this function.
+
+            // remember that each join is a separated condition, so we have to specify the conditions. in this case the first one is on users and comments,
+            // then on comments and reports.
             string sql_query = @"SELECT c.id, c.user_id, c.report_id, c.user_comment, c.created_at, u.username FROM comments c 
-            JOIN users u ON u.id = c.user_id AND c.id = @report_id";
+            JOIN users u ON u.id = c.user_id JOIN reports r ON r.id = c.report_id WHERE r.id = @report_id";
 
             var command = new NpgsqlCommand(sql_query, _DBConnection);
 
