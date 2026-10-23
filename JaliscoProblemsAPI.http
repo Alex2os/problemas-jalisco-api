@@ -1,0 +1,16 @@
+@JaliscoProblemsAPI_HostAddress = http://localhost:5140
+
+GET {{JaliscoProblemsAPI_HostAddress}}/reports?limit=20
+Accept: application/json
+
+###
+GET {{JaliscoProblemsAPI_HostAddress}}/reports/search?query=Guadalajara&limit=20
+Accept: application/json
+
+###
+GET {{JaliscoProblemsAPI_HostAddress}}/reports/1
+Accept: application/json
+
+###
+GET {{JaliscoProblemsAPI_HostAddress}}/reports/1/comments?limit=20
+Accept: application/json

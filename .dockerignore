@@ -1,0 +1,14 @@
+.git
+**/bin
+**/obj
+**/__pycache__
+.vs
+.env
+.env.*
+Properties/launchSettings.json
+*.user
+*.suo
+*.csproj.lscache
+tests
+
+App_Data

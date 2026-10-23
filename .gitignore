@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.csproj.lscache
+.env
+.env.*
+!.env.example
+Properties/launchSettings.json
+TestResults/
+__pycache__/
+*.pyc
+
+App_Data/
