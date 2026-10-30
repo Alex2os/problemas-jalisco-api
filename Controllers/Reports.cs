@@ -56,6 +56,23 @@ public sealed class ReportsController(ReportRepository reports, GeocodingService
         return Ok(new { message = "Los reportes filtrados se obtuvieron con éxito.", reports = items });
     }
 
+    [HttpGet("recommended")]
+    public async Task<IActionResult> GetRecommendedReports([FromQuery] RecommendedReportsQuery query, CancellationToken cancellationToken)
+    {
+        var items = await reports.GetRecommendedReportsAsync(ViewerId, query.Latitude, query.Longitude,
+            query.Limit + 1, query.Offset, cancellationToken);
+        var hasMore = items.Count > query.Limit;
+        if (hasMore) items.RemoveAt(items.Count - 1);
+        return Ok(new
+        {
+            message = "Los reportes recomendados se obtuvieron con éxito.",
+            reports = items.Select(item => item.Report),
+            recommendations = items.Select(item => item.Recommendation),
+            has_more = hasMore,
+            next_offset = hasMore ? (int?)(query.Offset + query.Limit) : null
+        });
+    }
+
     [Authorize]
     [EnableRateLimiting("write")]
     [HttpPost("{report_id}/comments")]

@@ -568,5 +568,74 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(statuses, self.sql('SELECT id,status,status_version,status_updated_at FROM public.reports ORDER BY id'))
 
 
+    def test_18_recommendations_validation_ranking_identity_and_pagination(self):
+        endpoint = '/reports/recommended'
+        for query in ['?latitude=20', '?longitude=-103', '?latitude=91&longitude=0',
+                      '?latitude=0&longitude=-181', '?latitude=NaN&longitude=0',
+                      '?latitude=no&longitude=0', '?limit=0', '?limit=51', '?offset=-1']:
+            self.problem(request(self.base, 'GET', endpoint + query), 400)
+
+        fixtures = [
+            ('rec-related', 20.67, -103.35, 'reported', self.user_id),
+            ('rec-unrelated', 20.67, -103.35, 'reported', 1),
+            ('rec-related', 22.0, -103.35, 'reported', 1),
+            ('rec-unrelated', 20.67, -103.35, 'resolved', 1),
+        ]
+        ids = []
+        for index, (category, lat, lon, status, owner) in enumerate(fixtures):
+            location = f'recommendation-fixture-{index}'
+            self.sql(f"INSERT INTO reports(longitude,latitude,ubication,type,user_id,status,created_at) VALUES({lon},{lat},'{location}','{category}',{owner},'{status}','2099-01-01')")
+            ids.append(int(self.sql(f"SELECT id FROM reports WHERE ubication='{location}'")))
+
+        status, guest, headers = request(self.base, 'GET', endpoint + '?limit=50')
+        self.assertEqual(200, status)
+        self.assertIn('no-store', headers.get('Cache-Control', ''))
+        self.assertTrue(all(not report['can_manage'] and not report['liked_by_me'] for report in guest['reports']))
+        self.assertTrue(all(item['reason'] == 'recent' and item['distance_km'] is None for item in guest['recommendations']))
+        guest_ids = [r['id'] for r in guest['reports'] if r['id'] in ids]
+        self.assertEqual([ids[2], ids[1], ids[0], ids[3]], guest_ids)
+
+        query = '?latitude=20.67&longitude=-103.35&limit=50'
+        status, personalized, _ = request(self.base, 'GET', endpoint + query, token=self.token)
+        self.assertEqual(200, status)
+        ordered = [r['id'] for r in personalized['reports'] if r['id'] in ids]
+        self.assertEqual([ids[0], ids[1], ids[2], ids[3]], ordered)
+        reasons = {item['report_id']: item for item in personalized['recommendations']}
+        self.assertEqual('nearby_and_related', reasons[ids[0]]['reason'])
+        self.assertEqual(0, reasons[ids[0]]['distance_km'])
+        self.assertEqual('nearby', reasons[ids[1]]['reason'])
+        self.assertEqual('related_category', reasons[ids[2]]['reason'])
+        self.assertGreater(reasons[ids[2]]['distance_km'], 5)
+        self.assertTrue(next(r for r in personalized['reports'] if r['id'] == ids[0])['can_manage'])
+
+        # Confirmations also create category relevance, using the token identity only.
+        self.sql(f"INSERT INTO likes(user_id,report_id) VALUES({self.user_id},{ids[1]})")
+        confirmed = request(self.base, 'GET', endpoint, token=self.token)[1]
+        self.assertEqual('related_category', next(item for item in confirmed['recommendations'] if item['report_id'] == ids[1])['reason'])
+        # A submitted identity must not personalize an anonymous read.
+        spoofed = request(self.base, 'GET', endpoint + f'?user_id={self.user_id}')[1]
+        self.assertTrue(all(item['reason'] == 'recent' for item in spoofed['recommendations']))
+
+        seen, offset = [], 0
+        while True:
+            page = request(self.base, 'GET', endpoint + f'?limit=2&offset={offset}', token=self.token)[1]
+            self.assertLessEqual(len(page['reports']), 2)
+            self.assertEqual([r['id'] for r in page['reports']], [r['report_id'] for r in page['recommendations']])
+            seen.extend(r['id'] for r in page['reports'])
+            if not page['has_more']:
+                self.assertIsNone(page['next_offset'])
+                break
+            self.assertEqual(offset + 2, page['next_offset'])
+            offset = page['next_offset']
+        self.assertEqual(len(seen), len(set(seen)))
+        full = request(self.base, 'GET', endpoint + '?limit=50', token=self.token)[1]
+        self.assertEqual([r['id'] for r in full['reports']], seen)
+        empty = request(self.base, 'GET', endpoint + '?offset=10000')[1]
+        self.assertEqual([], empty['reports'])
+        self.assertEqual([], empty['recommendations'])
+        self.assertFalse(empty['has_more'])
+        self.assertIsNone(empty['next_offset'])
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2)

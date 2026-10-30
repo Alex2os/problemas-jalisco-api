@@ -115,3 +115,7 @@ This configures database tables only; the API still requires its connection/JWT 
 ## Photo storage reliability
 
 In Development, an unset, empty or whitespace-only `PhotoStorage:RootPath` uses `App_Data/report-photos` under the content root. Other environments still require an explicit absolute path. Failed photo writes check database references before deleting files; these checks use a separate five-second cleanup deadline, independent of request cancellation. Files are retained when a database commit cannot be confirmed.
+
+## Recommended reports (Para ti)
+
+`GET /reports/recommended` adds optional location/category relevance with guest fallback and bounded pages. Existing report endpoints are unchanged. See [ranking, parameters, response fields and pagination limitations](docs/recommendations.md).
