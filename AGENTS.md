@@ -6,6 +6,8 @@ ProblemasJalisco API is an ASP.NET Core 10 / C# REST API serving a separate Expo
 
 Inspect the current code, project files, README.md and relevant docs before changing behavior. Preserve compatibility with the mobile clients.
 
+The product is a practical civic reporting tool, not a social network. Recommendations should help people discover relevant civic problems, not optimize engagement or popularity.
+
 ## Architecture
 
 - Controllers/: HTTP routing, request validation, authentication and response composition.
@@ -51,6 +53,17 @@ Prefer existing controllers, concrete repositories and focused services. Keep co
 - Use existing authentication and write rate-limit policies where appropriate.
 - Personalized responses must not leak across users through caches. Preserve existing no-store behavior.
 
+## Recommended reports (Para ti)
+
+- The frontend uses `GET /reports/recommended`. Read `docs/recommendations.md` before changing its contract or ranking.
+- Current ranking is rule-based: unresolved status, proximity within 5 km when coordinates are supplied, relevant categories from the authenticated user's reports/confirmations, then recency and ID. Do not describe this as AI or silently substitute a popularity feed.
+- Keep the existing report shape plus recommendation reasons, nullable distance, `has_more` and `next_offset`. Preserve bounded page sizes and deterministic ordering for an unchanged dataset.
+- Preserve public access and useful fallbacks when location or user history is absent. User identity comes only from JWT claims; supplied user IDs must not personalize a guest request.
+- Coordinates must be paired, finite and in range. For floating-point properties, use floating-point Range bounds; test NaN, infinity and fractional values just outside the bounds to prevent conversion exceptions and accidental acceptance.
+- Location is request-scoped. Do not persist coordinates, add viewing history or log precise locations unnecessarily. Preserve no-store responses.
+- Offset pagination can shift when data changes. Document that limitation and retain frontend deduplication; do not claim snapshot consistency.
+- Keep future AI changes explicit, separately scoped and compatible with guest/error fallback.
+
 ## PostgreSQL and migrations
 
 - Parameterize all untrusted SQL values. Do not interpolate request data into SQL.
@@ -69,6 +82,8 @@ Prefer existing controllers, concrete repositories and focused services. Keep co
 - Use IHttpClientFactory, bounded timeouts, cancellation and existing caching/throttling patterns for external calls.
 - Preserve geocoding attribution, rate limits and failure handling. Tests should use fake services instead of public providers.
 - Preserve photo validation, size/count limits, ownership, safe storage paths and configured persistent storage.
+- Blank photo storage paths use the content-root default only in Development; other environments require an explicit absolute path.
+- Failed-upload cleanup must check database references before deleting files. Keep its independent, bounded cancellation deadline so request cancellation does not bypass cleanup, and retain files when commit status is uncertain.
 - Do not log sensitive report contents or precise user locations unnecessarily.
 - If AI is added, keep provider credentials server-side, validate model output, bound requests/costs and provide a defined failure fallback. Do not treat model output as authorization or trusted SQL.
 
@@ -91,6 +106,8 @@ python3 tests/integration.py
 
 Read the integration test prerequisites in README.md first. The suite requires a built Debug API, an unprivileged Unix user and local PostgreSQL tools; it creates its own disposable database and fake geocoder. Never redirect it to a real application database.
 
+For frontend integration, set `JALISCO_TEST_FRONTEND_DIR` to the actual frontend checkout rather than relying on the legacy default directory name. The client scripts must reference current service filenames. Report skipped checks separately; do not call them passing checks.
+
 Add focused coverage for new behavior and meaningful regressions, including invalid input, permissions and fallback cases where relevant. Report checks that could not run and distinguish pre-existing failures from regressions. Documentation-only changes require review and git diff --check, not an application build.
 
 ## Git and scope
@@ -101,3 +118,9 @@ Add focused coverage for new behavior and meaningful regressions, including inva
 - Do not commit, push, rebase or force-push without explicit authorization.
 - Do not change secrets, deployment configuration or the frontend repository unless explicitly requested.
 - Explain significant design decisions, summarize changed files and report validation results and material limitations.
+
+## Incremental delivery
+
+- Work in agreed stages. Finish and validate a backend step, then report its results before starting the next stage or frontend integration.
+- Continue routine, reversible API work already authorized by the user without repeatedly requesting confirmation. Environment/sandbox approvals, when required, still apply.
+- Preserve existing architecture and contracts; “remake” or cleanup requests mean targeted, justified improvements unless the user explicitly requests a rewrite.
