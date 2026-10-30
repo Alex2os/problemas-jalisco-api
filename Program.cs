@@ -87,7 +87,8 @@ builder.Services.AddAuthorization();
 
 var authLimit = builder.Configuration.GetValue("RateLimiting:AuthPermitLimit", 20);
 var writeLimit = builder.Configuration.GetValue("RateLimiting:WritePermitLimit", 30);
-if (authLimit <= 0 || writeLimit <= 0) throw new InvalidOperationException("Rate limit permit counts must be positive.");
+var geocodingLimit = builder.Configuration.GetValue("RateLimiting:GeocodingPermitLimit", 30);
+if (authLimit <= 0 || writeLimit <= 0 || geocodingLimit <= 0) throw new InvalidOperationException("Rate limit permit counts must be positive.");
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -100,6 +101,9 @@ builder.Services.AddRateLimiter(options =>
     options.AddPolicy("auth", context => RateLimitPartition.GetFixedWindowLimiter(
         context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
         { PermitLimit = authLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("geocoding", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.User.FindFirst("user_id")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = geocodingLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("write", context => RateLimitPartition.GetFixedWindowLimiter(
         context.User.FindFirst("user_id")?.Value ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = writeLimit, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));

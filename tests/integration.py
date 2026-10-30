@@ -91,6 +91,13 @@ class Geocoder(http.server.BaseHTTPRequestHandler):
             payload = {'display_name': '😀' * 300}
         elif lat == '21.126':
             time.sleep(6)
+        elif lat == '21.127':
+            status, payload = 404, {'error': 'Unable to geocode'}
+        elif lat == '21.128':
+            payload = {'display_name': 'Zona rural, Jalisco', 'address': {'town': 'Pueblo'}}
+        elif lat == '21.13':
+            payload = {'display_name': 'Calle Morelos 10, Centro, Guadalajara', 'address': {
+                'road': 'Calle Morelos', 'house_number': '10', 'suburb': 'Centro', 'city': 'Guadalajara'}}
         data = json.dumps(payload, ensure_ascii=False).encode()
         try:
             self.send_response(status)
@@ -635,6 +642,54 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual([], empty['recommendations'])
         self.assertFalse(empty['has_more'])
         self.assertIsNone(empty['next_offset'])
+
+
+    def test_19_location_preview_auth_validation_cache_failures_and_rate_limits(self):
+        endpoint = '/locations/reverse'
+        valid = '?latitude=21.130&longitude=-103.35'
+        self.problem(request(self.base, 'GET', endpoint + valid), 401)
+        calls = len(self.geocoder.calls)
+        for query in ['', '?latitude=20', '?longitude=-103', '?latitude=18.919&longitude=-103',
+                      '?latitude=20&longitude=-101.499', '?latitude=NaN&longitude=-103',
+                      '?latitude=20&longitude=Infinity', '?latitude=no&longitude=-103']:
+            self.problem(request(self.base, 'GET', endpoint + query, token=self.token), 400)
+        self.assertEqual(calls, len(self.geocoder.calls))
+        count = self.sql('SELECT count(*) FROM reports')
+        status, body, headers = request(self.base, 'GET', endpoint + valid, token=self.token)
+        self.assertEqual(200, status)
+        self.assertIn('no-store', headers.get('Cache-Control', ''))
+        location = body['location']
+        self.assertEqual(21.130, location['latitude'])
+        self.assertEqual(-103.35, location['longitude'])
+        self.assertTrue(location['available'])
+        self.assertEqual('Calle Morelos 10', location['address'])
+        self.assertEqual('Centro', location['colonia'])
+        self.assertEqual('Guadalajara', location['municipality'])
+        self.assertEqual(count, self.sql('SELECT count(*) FROM reports'))
+        self.assertEqual(body, request(self.base, 'GET', endpoint + valid, token=self.token)[1])
+        self.assertEqual(calls + 1, len(self.geocoder.calls))
+        created = request(self.base, 'POST', '/reports/create', {'type': 'agua', 'latitude': 21.130, 'longitude': -103.35}, self.token)
+        self.assertEqual(200, created[0])
+        report = request(self.base, 'GET', f'/reports/{created[1]["report_id"]}')[1]['report']
+        self.assertEqual(location['formatted_address'], report['ubication'])
+        self.assertEqual(calls + 1, len(self.geocoder.calls))
+        partial = request(self.base, 'GET', endpoint + '?latitude=21.128&longitude=-103.35', token=self.token)[1]['location']
+        self.assertTrue(partial['available'])
+        self.assertIsNone(partial['street'])
+        self.assertIsNone(partial['colonia'])
+        self.assertEqual('Pueblo', partial['municipality'])
+        missing = request(self.base, 'GET', endpoint + '?latitude=21.127&longitude=-103.35', token=self.token)
+        self.assertEqual(200, missing[0])
+        self.assertFalse(missing[1]['location']['available'])
+        self.assertIsNone(missing[1]['location']['formatted_address'])
+        for lat in ['21.123', '21.124', '21.126']:
+            self.problem(request(self.base, 'GET', endpoint + f'?latitude={lat}&longitude=-103.35', token=self.token), 503)
+        limited = self.start_api({'RateLimiting__GeocodingPermitLimit': '1'})
+        self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.token)[0])
+        rejected = request(limited, 'GET', endpoint + valid, token=self.token)
+        self.problem(rejected, 429)
+        self.assertIn('Retry-After', rejected[2])
+        self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.other_user())[0])
 
 
 if __name__ == '__main__':

@@ -119,3 +119,7 @@ In Development, an unset, empty or whitespace-only `PhotoStorage:RootPath` uses 
 ## Recommended reports (Para ti)
 
 `GET /reports/recommended` adds optional location/category relevance with guest fallback and bounded pages. Existing report endpoints are unchanged. See [ranking, parameters, response fields and pagination limitations](docs/recommendations.md).
+
+## Report location address preview
+
+Authenticated `GET /locations/reverse?latitude=...&longitude=...` resolves a manually selected report location without device GPS access. It reuses report creation geocoding and adds a separate per-user limit (default 30/minute, `RateLimiting__GeocodingPermitLimit`). See [contract, no-coverage behavior, provider limits and frontend integration](docs/location-preview.md). No database migration is required.

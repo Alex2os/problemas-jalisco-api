@@ -87,4 +87,82 @@ public sealed class GeocodingTests
         Assert.Equal(255, address.EnumerateRunes().Count());
         Assert.DoesNotContain('\uFFFD', address);
     }
+    [Fact]
+    public async Task PreviewAndReportCreationShareStructuredCacheWithoutChangingLegacyAddress()
+    {
+        var calls = 0;
+        using var handler = new Handler((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(Json("""
+                {"display_name":"Calle Morelos 10, Centro, Guadalajara","address":{
+                    "road":"Calle Morelos","house_number":"10","suburb":"Centro","city":"Guadalajara"}}
+                """));
+        });
+        using var service = Service(handler);
+        var preview = await service.ReverseAddressAsync(20.67, -103.35, CancellationToken.None);
+        Assert.True(preview.Available);
+        Assert.Equal(20.67, preview.Latitude);
+        Assert.Equal(-103.35, preview.Longitude);
+        Assert.Equal("Calle Morelos", preview.Street);
+        Assert.Equal("10", preview.StreetNumber);
+        Assert.Equal("Calle Morelos 10", preview.Address);
+        Assert.Equal("Centro", preview.Colonia);
+        Assert.Equal("Guadalajara", preview.Municipality);
+        Assert.Equal(preview.FormattedAddress, await service.ReverseAsync(20.67, -103.35, CancellationToken.None));
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task MissingComponentsStayNullAndUseOnlyAvailableAddressData()
+    {
+        using var handler = new Handler((_, _) => Task.FromResult(Json("""
+            {"display_name":"Punto rural, Jalisco","address":{"town":"Pueblo","state":"Jalisco","road":null,"house_number":123}}
+            """)));
+        using var service = Service(handler);
+        var preview = await service.ReverseAddressAsync(20, -103, CancellationToken.None);
+        Assert.True(preview.Available);
+        Assert.Null(preview.Street);
+        Assert.Null(preview.StreetNumber);
+        Assert.Null(preview.Colonia);
+        Assert.Equal("Pueblo", preview.Municipality);
+        Assert.Equal("Punto rural, Jalisco", preview.Address);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.OK)]
+    [InlineData(HttpStatusCode.NotFound)]
+    public async Task NoCoverageIsExplicitAndCachedButCannotCreateAFabricatedReportAddress(HttpStatusCode status)
+    {
+        var calls = 0;
+        using var handler = new Handler((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("{\"error\":\"Unable to geocode\"}") });
+        });
+        using var service = Service(handler);
+        var preview = await service.ReverseAddressAsync(20, -103, CancellationToken.None);
+        Assert.False(preview.Available);
+        Assert.Null(preview.FormattedAddress);
+        Assert.Null(preview.Municipality);
+        Assert.Equal(preview, await service.ReverseAddressAsync(20, -103, CancellationToken.None));
+        await Assert.ThrowsAsync<GeocodingUnavailableException>(() => service.ReverseAsync(20, -103, CancellationToken.None));
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task UnexpectedProviderErrorsAreNotCachedAsNoCoverage()
+    {
+        var calls = 0;
+        using var handler = new Handler((_, _) =>
+        {
+            calls++;
+            return Task.FromResult(calls == 1 ? new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) : Json("{\"display_name\":\"Recuperado\"}"));
+        });
+        using var service = Service(handler);
+        await Assert.ThrowsAsync<GeocodingUnavailableException>(() => service.ReverseAddressAsync(20, -103, CancellationToken.None));
+        Assert.True((await service.ReverseAddressAsync(20, -103, CancellationToken.None)).Available);
+        Assert.Equal(2, calls);
+    }
+
 }
