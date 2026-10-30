@@ -24,7 +24,9 @@ public sealed class ReportPhotoStorage : IReportPhotoStorage
         var configured = config["PhotoStorage:RootPath"];
         if (string.IsNullOrWhiteSpace(configured) && !environment.IsDevelopment())
             throw new InvalidOperationException("Configure PhotoStorage:RootPath to a persistent, writable absolute directory.");
-        root = configured ?? Path.Combine(environment.ContentRootPath, "App_Data", "report-photos");
+        root = string.IsNullOrWhiteSpace(configured)
+            ? Path.Combine(environment.ContentRootPath, "App_Data", "report-photos")
+            : configured;
         if (!Path.IsPathFullyQualified(root)) throw new InvalidOperationException("PhotoStorage:RootPath must be absolute.");
         Directory.CreateDirectory(root);
     }

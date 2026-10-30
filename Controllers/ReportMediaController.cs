@@ -47,11 +47,13 @@ public sealed class ReportMediaController(ReportRepository reports, IReportPhoto
 
     private async Task CleanupUncommittedAsync(List<StoredPhoto> stored)
     {
+        // Cleanup must survive request cancellation, but must not wait indefinitely.
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         foreach (var photo in stored)
         {
             try
             {
-                if (!await reports.IsPhotoReferencedAsync(photo.Key)) storage.Delete(photo.Key);
+                if (!await reports.IsPhotoReferencedAsync(photo.Key, cleanup.Token)) storage.Delete(photo.Key);
             }
             catch (Exception error)
             {

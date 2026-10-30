@@ -38,7 +38,7 @@ Set secrets and environment before startup; the commands above contain no creden
 | GET | `/reports` | Public | 200 `{ message, reports }`, newest ID first |
 | GET | `/reports/search?query=...` | Public | 200 `{ message, reports }` |
 | GET | `/reports/{report_id}` | Public | 200 `{ message, report }` |
-| POST | `/reports/create` | Bearer | 200 `{ message }` |
+| POST | `/reports/create` | Bearer | 200 `{ message, report_id }` |
 | GET | `/reports/{report_id}/comments` | Public | 200 `{ message, comments, interactions, has_more, next_after_id }`, oldest ID first |
 | POST | `/reports/{report_id}/comments` | Bearer | 200 `{ message, comment, interactions }` |
 | PUT / DELETE | `/reports/{report_id}/like` | Bearer | 200 `{ message, interactions }` |
@@ -111,3 +111,7 @@ Reports now support up to three persistent photos and owner-managed `reported`, 
 Open **schema.sql**, copy the entire file into your PostgreSQL query editor (for example Neon SQL Editor or pgAdmin), and run it as the database owner. It creates a new database's tables or upgrades this project's existing tables, preserving data. It is safe to run again against the expected project schema. No terminal commands, credentials or hosted role names need to be edited. The old `jalisco-problemas_schema.sql` filename contains the same query-editor-compatible SQL.
 
 This configures database tables only; the API still requires its connection/JWT settings and a durable `PhotoStorage__RootPath` in production.
+
+## Photo storage reliability
+
+In Development, an unset, empty or whitespace-only `PhotoStorage:RootPath` uses `App_Data/report-photos` under the content root. Other environments still require an explicit absolute path. Failed photo writes check database references before deleting files; these checks use a separate five-second cleanup deadline, independent of request cancellation. Files are retained when a database commit cannot be confirmed.

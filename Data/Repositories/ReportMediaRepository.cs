@@ -131,10 +131,10 @@ public sealed partial class ReportRepository
         return await cmd.ExecuteScalarAsync(ct) as string;
     }
 
-    public async Task<bool> IsPhotoReferencedAsync(string key)
+    public async Task<bool> IsPhotoReferencedAsync(string key, CancellationToken cancellationToken)
     {
         await using var cmd = dataSource.CreateCommand("SELECT EXISTS(SELECT 1 FROM report_images WHERE storage_key=$1)");
         cmd.Parameters.AddWithValue(key);
-        return (bool)(await cmd.ExecuteScalarAsync())!;
+        return (bool)(await cmd.ExecuteScalarAsync(cancellationToken))!;
     }
 }
