@@ -64,6 +64,24 @@ Prefer existing controllers, concrete repositories and focused services. Keep co
 - Offset pagination can shift when data changes. Document that limitation and retain frontend deduplication; do not claim snapshot consistency.
 - Keep future AI changes explicit, separately scoped and compatible with guest/error fallback.
 
+## Report location address preview
+
+- The frontend uses authenticated `GET /locations/reverse?latitude=...&longitude=...` to resolve a manually selected map pin. Read `docs/location-preview.md` before changing its contract.
+- Require a valid token for an existing user. Both coordinates are required, finite and within the same Jalisco bounds as report creation. Preview is read-only and must not create a report or persist location history.
+- Preserve the response envelope and structured fields, including echoed selected coordinates, `available`, nullable address components and formatted address. Never replace the selected coordinates with the provider's nearest feature or invent missing address components.
+- Distinguish explicit no coverage (200 with `available: false`) from invalid input (400), authentication failure (401), rate limiting (429 with Retry-After), and provider failure/timeout (503).
+- Preview and report creation share `GeocodingService`, its structured cache and outbound gate. Keep `ReverseAsync` compatible with existing report creation: return the bounded formatted string or fail without inserting a fabricated address.
+- Preserve the bounded cache: successful results for 24 hours, explicit no coverage for five minutes, transient failures uncached. Cached address data is not user-specific; HTTP responses remain no-store.
+- Keep the separate per-user geocoding rate policy and existing configurable limit. Preserve application-wide provider throttling, request cancellation, bounded waits and timeouts. Process-local gates do not coordinate multiple API instances.
+- Device GPS permission is a frontend concern. Manual lookup must work without device-location access; do not add permission flags to the API contract.
+- Use fake geocoders in tests. Cover structured/partial results, no coverage, cache reuse with report creation, invalid/non-finite coordinates, authentication, timeout and rate-limit behavior.
+
+## Client-facing error behavior
+
+- Keep sanitized Spanish errors and the existing top-level `message` extension so the shared frontend error/retry UI can display them.
+- Do not convert provider outages, database failures or uncertain write completion into successful empty results. Preserve meaningful HTTP status codes.
+- Maintain idempotency and concurrency protections; do not introduce automatic write retries that could duplicate reports or comments after a lost response.
+
 ## PostgreSQL and migrations
 
 - Parameterize all untrusted SQL values. Do not interpolate request data into SQL.
