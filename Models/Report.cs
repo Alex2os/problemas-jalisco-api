@@ -16,6 +16,9 @@ public class Report
     [JsonPropertyName("ubication")]
     public string Ubication { get; set; } = string.Empty;
 
+    [JsonPropertyName("title")]
+    public string? Title { get; set; }
+
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 

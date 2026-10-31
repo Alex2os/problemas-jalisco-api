@@ -66,13 +66,14 @@ public sealed partial class ReportRepository
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);
         await using var transaction = await connection.BeginTransactionAsync(ct);
-        await using var cmd = new NpgsqlCommand("INSERT INTO reports(longitude,latitude,ubication,description,type,user_id) VALUES($1,$2,$3,$4,$5,$6) RETURNING id", connection, transaction);
+        await using var cmd = new NpgsqlCommand("INSERT INTO reports(longitude,latitude,ubication,description,type,user_id,title) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id", connection, transaction);
         cmd.Parameters.AddWithValue(report.Longitude);
         cmd.Parameters.AddWithValue(report.Latitude);
         cmd.Parameters.AddWithValue(report.Ubication);
         cmd.Parameters.AddWithValue(report.Description);
         cmd.Parameters.AddWithValue(report.Type);
         cmd.Parameters.AddWithValue(report.UserId);
+        cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Varchar, (object?)report.Title ?? DBNull.Value);
         var id = (int)(await cmd.ExecuteScalarAsync(ct))!;
         await InsertPhotosAsync(connection, transaction, id, report.UserId, photos, ct);
         await transaction.CommitAsync(ct);

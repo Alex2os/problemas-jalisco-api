@@ -11,7 +11,7 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
             r.status, r.status_updated_at, r.status_version, r.user_id = $1,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.id,'url','/reports/'||r.id||'/photos/'||i.id||'/content',
                 'display_order',i.display_order,'created_at',i.created_at) ORDER BY i.display_order)
-                FROM report_images i WHERE i.report_id = r.id),'[]'::jsonb)::text
+                FROM report_images i WHERE i.report_id = r.id),'[]'::jsonb)::text, r.title
         FROM reports r JOIN users u ON u.id = r.user_id
         LEFT JOIN (SELECT report_id, count(*) AS like_count FROM likes GROUP BY report_id) l ON l.report_id = r.id
         LEFT JOIN (SELECT report_id, count(*) AS comment_count FROM comments GROUP BY report_id) c ON c.report_id = r.id
@@ -35,8 +35,8 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
     public async Task<int> CreateReportAsync(Report report, CancellationToken cancellationToken)
     {
         await using var command = dataSource.CreateCommand("""
-            INSERT INTO reports (longitude, latitude, ubication, description, type, user_id)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+            INSERT INTO reports (longitude, latitude, ubication, description, type, user_id, title)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
             """);
         command.Parameters.AddWithValue(report.Longitude);
         command.Parameters.AddWithValue(report.Latitude);
@@ -44,6 +44,7 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         command.Parameters.AddWithValue(report.Description);
         command.Parameters.AddWithValue(report.Type);
         command.Parameters.AddWithValue(report.UserId);
+        command.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Varchar, (object?)report.Title ?? DBNull.Value);
         return (int)(await command.ExecuteScalarAsync(cancellationToken))!;
     }
 
@@ -65,7 +66,7 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         if (query is not null)
         {
             command.Parameters.AddWithValue($"%{query}%");
-            sql += $" AND r.ubication ILIKE ${command.Parameters.Count}";
+            sql += $" AND (r.ubication ILIKE ${command.Parameters.Count} OR r.type ILIKE ${command.Parameters.Count} OR r.description ILIKE ${command.Parameters.Count} OR r.title ILIKE ${command.Parameters.Count})";
         }
         if (beforeId.HasValue)
         {
@@ -135,7 +136,8 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         LikeCount = reader.GetInt64(9), CommentCount = reader.GetInt64(10), LikedByMe = reader.GetBoolean(11),
         Status = reader.GetString(12), StatusUpdatedAt = reader.GetDateTime(13), StatusVersion = reader.GetInt32(14),
         CanManage = reader.GetBoolean(15),
-        Photos = System.Text.Json.JsonSerializer.Deserialize<List<ReportPhoto>>(reader.GetString(16)) ?? []
+        Photos = System.Text.Json.JsonSerializer.Deserialize<List<ReportPhoto>>(reader.GetString(16)) ?? [],
+        Title = reader.IsDBNull(17) ? null : reader.GetString(17)
     };
 
     private static CommentWithUsername ReadComment(NpgsqlDataReader reader, int? viewerId) => new()

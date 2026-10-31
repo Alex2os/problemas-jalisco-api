@@ -38,6 +38,7 @@ public sealed class ReportsController(ReportRepository reports, GeocodingService
         var reportId = await reports.CreateReportAsync(new Report
         {
             UserId = userId, Latitude = request.Latitude, Longitude = request.Longitude,
+            Title = request.Title.Trim(),
             Description = request.Description ?? string.Empty,
             Type = ReportCategories.Normalize(request.Type),
             Ubication = location

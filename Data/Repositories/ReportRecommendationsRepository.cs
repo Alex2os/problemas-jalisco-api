@@ -50,9 +50,9 @@ public sealed partial class ReportRepository
         while (await reader.ReadAsync(cancellationToken))
         {
             var report = ReadReport(reader);
-            double? distance = reader.IsDBNull(17) ? null : reader.GetDouble(17);
-            var preferred = reader.GetBoolean(18);
-            var nearby = reader.GetBoolean(19);
+            double? distance = reader.IsDBNull(18) ? null : reader.GetDouble(18);
+            var preferred = reader.GetBoolean(19);
+            var nearby = reader.GetBoolean(20);
             var reason = nearby && preferred ? "nearby_and_related" : nearby ? "nearby" : preferred ? "related_category" : "recent";
             items.Add((report, new ReportRecommendation(report.Id, reason, distance.HasValue ? Math.Round(distance.Value, 2) : null)));
         }

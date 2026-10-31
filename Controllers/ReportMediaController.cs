@@ -76,6 +76,7 @@ public sealed class ReportMediaController(ReportRepository reports, IReportPhoto
                 UserId = UserId,
                 Latitude = request.Latitude,
                 Longitude = request.Longitude,
+                Title = request.Title.Trim(),
                 Description = request.Description ?? string.Empty,
                 Type = ReportCategories.Normalize(request.Type),
                 Ubication = location

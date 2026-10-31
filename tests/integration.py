@@ -142,6 +142,11 @@ class ApiIntegrationTests(unittest.TestCase):
         migration = (ROOT / 'database/migrations/001_report_photos_status.sql').read_text()
         cls.sql(migration)
         cls.sql(migration)  # Safe to repeat; history and existing rows must survive.
+        title_migration = (ROOT / 'database/migrations/002_report_titles.sql').read_text()
+        cls.sql(title_migration)
+        cls.sql(title_migration)
+        if cls.sql('SELECT title IS NULL FROM reports WHERE id=1') != 't':
+            raise RuntimeError('Title migration must preserve the legacy NULL title.')
         cls.geocoder = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Geocoder)
         cls.geocoder.calls, cls.geocoder.lock = [], threading.Lock()
         cls.addClassCleanup(cls.geocoder.server_close)
@@ -157,7 +162,7 @@ class ApiIntegrationTests(unittest.TestCase):
         if status != 200:
             raise RuntimeError('Fixture login failed.')
         cls.token, cls.user_id = body['token'], body['user']['id']
-        request(cls.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, cls.token)
+        request(cls.base, 'POST', '/reports/create', {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, cls.token)
         cls.report_id = request(cls.base, 'GET', '/reports')[1]['reports'][0]['id']
 
     @classmethod
@@ -236,7 +241,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(request(self.base, 'GET', '/not-an-endpoint'), 404)
 
     def test_02_authorization_and_identity_spoofing(self):
-        data = {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496, 'user_id': 99999}
+        data = {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496, 'user_id': 99999}
         self.problem(request(self.base, 'POST', '/reports/create', data), 401)
         for token in ['malformed', self.jwt({'exp': int(time.time()) - 600}), self.jwt({'iss': 'wrong'}), self.jwt({'aud': 'wrong'}), self.jwt({'user_id': '-1'}), self.jwt({'user_id': 'not-a-number'}), self.jwt(key='different-test-key-at-least-32-bytes')]:
             self.problem(request(self.base, 'POST', '/reports/create', data, token), 401)
@@ -246,7 +251,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(self.user_id, item['user_id'])
 
     def test_03_validation_is_readable_by_expo(self):
-        invalid = {'type': 'otro', 'latitude': 0, 'longitude': -103}
+        invalid = {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': 0, 'longitude': -103}
         body, _ = self.problem(request(self.base, 'POST', '/reports/create', invalid, self.token), 400)
         self.assertIn('errors', body)
         self.problem(request(self.base, 'POST', '/auth/register', {'username': 'x' * 21, 'email': 'other@example.invalid', 'password': self.password}), 400)
@@ -267,7 +272,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual(self.user_id, body['comments'][-1]['user_id'])
         self.assertEqual('Useful detail', body['comments'][-1]['user_comment'])
-        legacy = self.sql(f"INSERT INTO reports(longitude,latitude,ubication,description,type,created_at,user_id) VALUES(-103,20,'Legacy',NULL,'otros',NULL,{self.user_id}) RETURNING id")
+        legacy = self.sql(f"INSERT INTO reports(title,longitude,latitude,ubication,description,type,created_at,user_id) VALUES('Reporte de prueba',-103,20,'Legacy',NULL,'otros',NULL,{self.user_id}) RETURNING id")
         legacy = int(legacy.splitlines()[0])
         status, body, _ = request(self.base, 'GET', f'/reports/{legacy}')
         self.assertEqual(200, status)
@@ -301,18 +306,42 @@ class ApiIntegrationTests(unittest.TestCase):
             statuses = list(pool.map(lambda path: request(self.base, 'GET', path)[0], paths))
         self.assertTrue(all(status == 200 for status in statuses))
 
+    def test_07_description_and_type_search(self):
+        ids = []
+        for description in ['SearchNeedleAlpha beside the crossing', 'another SEARCHNEEDLEALPHA detail', None]:
+            value = 'NULL' if description is None else "'" + description + "'"
+            result = self.sql(f"INSERT INTO reports(title,longitude,latitude,ubication,description,type,user_id) VALUES('Reporte de prueba',-103,20,'SearchLocationOnly',{value},'alumbrado',{self.user_id}) RETURNING id")
+            ids.append(int(result.splitlines()[0]))
+        try:
+            def search(query, suffix=''):
+                status, body, _ = request(self.base, 'GET', '/reports/search?query=' + urllib.parse.quote(query) + suffix)
+                self.assertEqual(200, status)
+                return [report['id'] for report in body['reports']]
+            self.assertEqual(ids[1::-1], search('searchneedlealpha'))
+            self.assertEqual(ids[1::-1], search('NeedleAl'))
+            self.assertEqual(ids[::-1], search('SearchLocationOnly'))
+            self.assertTrue(set(ids).issubset(search('ALUMBRADO')))
+            first = search('searchneedlealpha', '&limit=1')
+            self.assertEqual([ids[1]], first)
+            self.assertEqual([ids[0]], search('searchneedlealpha', f'&limit=1&beforeId={first[0]}'))
+            self.assertEqual([], search('NoSuchSearchNeedle'))
+            self.assertEqual([], search("' OR 1=1 --"))
+        finally:
+            report_ids = ','.join(map(str, ids))
+            self.sql(f'BEGIN; DELETE FROM report_status_history WHERE report_id IN ({report_ids}); DELETE FROM reports WHERE id IN ({report_ids}); COMMIT;')
+
     def test_08_geocoder_cache_failures_and_unicode(self):
         with self.geocoder.lock:
             before = len(self.geocoder.calls)
         for _ in range(2):
-            self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, self.token)[0])
+            self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, self.token)[0])
         with self.geocoder.lock:
             self.assertEqual(before, len(self.geocoder.calls))
         count = int(self.sql('SELECT count(*) FROM reports'))
         for latitude in [21.123, 21.124, 21.126]:
-            self.problem(request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': latitude, 'longitude': -103}, self.token), 503)
+            self.problem(request(self.base, 'POST', '/reports/create', {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': latitude, 'longitude': -103}, self.token), 503)
         self.assertEqual(count, int(self.sql('SELECT count(*) FROM reports')))
-        self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 21.125, 'longitude': -103}, self.token)[0])
+        self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'title': 'Reporte de prueba', 'type': 'otro', 'latitude': 21.125, 'longitude': -103}, self.token)[0])
         location = request(self.base, 'GET', '/reports')[1]['reports'][0]['ubication']
         self.assertEqual(255, len(location))
         self.assertNotIn('\uFFFD', location)
@@ -496,7 +525,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(request(self.base, 'PUT', '/reports/99999/status', {'status': 'resolved', 'expected_version': 0}, self.token), 404)
 
     def test_15_photos_atomic_create_limits_validation_and_persistence(self):
-        fields = {'type': 'otro', 'description': 'With real photos', 'latitude': 20.6597, 'longitude': -103.3496}
+        fields = {'title': 'Reporte de prueba', 'type': 'otro', 'description': 'With real photos', 'latitude': 20.6597, 'longitude': -103.3496}
         self.problem(multipart(self.base, '/reports/create-with-photos', None, [png()], fields), 401)
         before = int(self.sql('SELECT count(*) FROM reports'))
         self.problem(multipart(self.base, '/reports/create-with-photos', self.token, [png(), b'not an image'], fields), 400)
@@ -552,7 +581,7 @@ class ApiIntegrationTests(unittest.TestCase):
         if not script.is_file() or not shutil.which('node'):
             self.skipTest('Mobile project/Node unavailable.')
         # Obtain real normalized JPEG bytes from the API, then use them as a native-selected file.
-        _, body, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], {'type':'otro','latitude':20.6597,'longitude':-103.3496})
+        _, body, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], {'title': 'Reporte de prueba', 'type':'otro','latitude':20.6597,'longitude':-103.3496})
         photo = self.runtime / 'mobile-selected.jpg'
         with urllib.request.urlopen(self.base + body['report']['photos'][0]['url']) as response:
             photo.write_bytes(response.read())
@@ -591,7 +620,7 @@ class ApiIntegrationTests(unittest.TestCase):
         ids = []
         for index, (category, lat, lon, status, owner) in enumerate(fixtures):
             location = f'recommendation-fixture-{index}'
-            self.sql(f"INSERT INTO reports(longitude,latitude,ubication,type,user_id,status,created_at) VALUES({lon},{lat},'{location}','{category}',{owner},'{status}','2099-01-01')")
+            self.sql(f"INSERT INTO reports(title,longitude,latitude,ubication,type,user_id,status,created_at) VALUES('Reporte de prueba',{lon},{lat},'{location}','{category}',{owner},'{status}','2099-01-01')")
             ids.append(int(self.sql(f"SELECT id FROM reports WHERE ubication='{location}'")))
 
         status, guest, headers = request(self.base, 'GET', endpoint + '?limit=50')
@@ -668,7 +697,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(count, self.sql('SELECT count(*) FROM reports'))
         self.assertEqual(body, request(self.base, 'GET', endpoint + valid, token=self.token)[1])
         self.assertEqual(calls + 1, len(self.geocoder.calls))
-        created = request(self.base, 'POST', '/reports/create', {'type': 'agua', 'latitude': 21.130, 'longitude': -103.35}, self.token)
+        created = request(self.base, 'POST', '/reports/create', {'title': 'Reporte de prueba', 'type': 'agua', 'latitude': 21.130, 'longitude': -103.35}, self.token)
         self.assertEqual(200, created[0])
         report = request(self.base, 'GET', f'/reports/{created[1]["report_id"]}')[1]['report']
         self.assertEqual(location['formatted_address'], report['ubication'])
@@ -690,6 +719,61 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(rejected, 429)
         self.assertIn('Retry-After', rejected[2])
         self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.other_user())[0])
+
+
+    def test_20_required_stored_titles_and_legacy_migration(self):
+        self.assertIsNone(request(self.base, 'GET', '/reports/1')[1]['report']['title'])
+        # Legacy rows remain editable for unrelated operations.
+        self.sql('UPDATE reports SET status=status WHERE id=1')
+        values = {'type': 'baches', 'latitude': 20.6597, 'longitude': -103.3496, 'description': 'Full description stays separate.'}
+        count = self.sql('SELECT count(*) FROM reports')
+        calls = len(self.geocoder.calls)
+        for invalid in [None, '', '   ', '\t', 'x' * 81, 'line one\nline two', 'Title\n', '😀' * 41]:
+            self.problem(request(self.base, 'POST', '/reports/create', dict(values, title=invalid), self.token), 400)
+            # Multipart has no null representation; omitting the title tests missing input instead.
+            fields = values if invalid is None else dict(values, title=invalid)
+            self.problem(multipart(self.base, '/reports/create-with-photos', self.token, [png()], fields), 400)
+        self.problem(request(self.base, 'POST', '/reports/create', values, self.token), 400)
+        self.assertEqual(count, self.sql('SELECT count(*) FROM reports'))
+        self.assertEqual(calls, len(self.geocoder.calls))
+        status, created, _ = request(self.base, 'POST', '/reports/create', dict(values, title='  TitleNeedle escuela  '), self.token)
+        self.assertEqual(200, status)
+        report_id = created['report_id']
+        for path in ['/reports', '/reports/search?query=titleneedle', '/reports/recommended?limit=50', f'/reports/{report_id}']:
+            status, body, _ = request(self.base, 'GET', path, token=self.token)
+            self.assertEqual(200, status)
+            report = body['report'] if 'report' in body else next(item for item in body['reports'] if item['id'] == report_id)
+            self.assertEqual('TitleNeedle escuela', report['title'])
+            self.assertEqual(values['description'], report['description'])
+        fields = dict(values, title='PhotoTitleNeedle' + 'x' * (80 - len('PhotoTitleNeedle')))
+        self.assertEqual(80, len(fields['title']))
+        status, photo, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], fields)
+        self.assertEqual(200, status)
+        self.assertEqual(fields['title'], photo['report']['title'])
+        self.assertEqual(1, len(photo['report']['photos']))
+        result = request(self.base, 'GET', '/reports/search?query=phototitleneedle&limit=1')[1]['reports']
+        self.assertEqual([photo['report_id']], [item['id'] for item in result])
+        self.assertEqual([], request(self.base, 'GET', f"/reports/search?query=phototitleneedle&beforeId={photo['report_id']}")[1]['reports'])
+        # DB enforcement is independent of API validation, including explicit title clearing.
+        for invalid_sql in [
+            f"INSERT INTO reports(longitude,latitude,ubication,type,user_id) VALUES(-103,20,'Test','otro',{self.user_id})",
+            f"INSERT INTO reports(title,longitude,latitude,ubication,type,user_id) VALUES('   ',-103,20,'Test','otro',{self.user_id})",
+            f"UPDATE reports SET title=NULL WHERE id={report_id}",
+            f"UPDATE reports SET title=E'one\\ntwo' WHERE id={report_id}",
+        ]:
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.sql(invalid_sql)
+        migration = (ROOT / 'database/migrations/002_report_titles.sql').read_text()
+        self.sql(migration)
+        self.sql(migration)
+        self.sql((ROOT / 'schema.sql').read_text())
+        self.sql((ROOT / 'jalisco-problemas_schema.sql').read_text())
+        restarted = self.start_api()
+        persisted = request(restarted, 'GET', f'/reports/{report_id}')[1]['report']
+        self.assertEqual('TitleNeedle escuela', persisted['title'])
+        self.assertEqual(values['description'], persisted['description'])
+        self.assertIsNone(request(restarted, 'GET', '/reports/1')[1]['report']['title'])
+        self.assertEqual(fields['title'], request(restarted, 'GET', f"/reports/{photo['report_id']}")[1]['report']['title'])
 
 
 if __name__ == '__main__':

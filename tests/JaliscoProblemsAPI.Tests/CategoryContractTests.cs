@@ -94,6 +94,7 @@ public sealed class CategoryContractTests
     {
         var dto = new CreateReportRequestDTO
         {
+            Title = "Reporte de prueba",
             Type = category,
             Latitude = 20.6597,
             Longitude = -103.3496,

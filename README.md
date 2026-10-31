@@ -46,7 +46,7 @@ Set secrets and environment before startup; the commands above contain no creden
 
 Report/comment JSON keeps all existing snake_case fields, including `ubication`, `created_at`, `user_id`, `report_id`, and `user_comment`. Ownership always comes from the validated JWT; a submitted user ID is ignored. Viewing reports and commenting on other people's reports remain supported. Only the authenticated author can delete a comment. Likes belong to the authenticated user; repeated like/unlike requests are safe.
 
-Optional `limit=1..200` and `beforeId=<positive ID>` provide keyset pagination for reports and search. Optional `limit=1..200` and `afterId=<positive ID>` paginate comments. Omit pagination to retain the existing full response used by the mobile map. Search continues to use PostgreSQL `ILIKE` wildcard semantics; values remain parameterized.
+Optional `limit=1..200` and `beforeId=<positive ID>` provide keyset pagination for reports and search. Optional `limit=1..200` and `afterId=<positive ID>` paginate comments. Omit pagination to retain the existing full response used by the mobile map. Search matches location (`ubication`), report type (`type`) or description (`description`), case-insensitively using PostgreSQL `ILIKE` wildcard semantics; values remain parameterized. Pagination applies after filtering; null descriptions still allow location/type matches.
 
 Errors use ProblemDetails/ValidationProblemDetails with the existing top-level `message` extension so the mobile client can still display them. Validation includes `errors`; unexpected failures include a trace ID rather than exception details. Success status codes and envelopes are retained. Intentional corrections:
 
@@ -123,3 +123,11 @@ In Development, an unset, empty or whitespace-only `PhotoStorage:RootPath` uses 
 ## Report location address preview
 
 Authenticated `GET /locations/reverse?latitude=...&longitude=...` resolves a manually selected report location without device GPS access. It reuses report creation geocoding and adds a separate per-user limit (default 30/minute, `RateLimiting__GeocodingPermitLimit`). See [contract, no-coverage behavior, provider limits and frontend integration](docs/location-preview.md). No database migration is required.
+
+## Required report titles
+
+Apply `database/migrations/002_report_titles.sql` after 001 and **before starting this API version**. The complete `schema.sql` and `jalisco-problemas_schema.sql` include the same change. All scripts are repeatable. Existing reports keep NULL titles; no description-derived or fabricated titles are backfilled. A database trigger requires a nonblank single-line title on every new insert and explicit title change, while preserving status/photo/comment operations on legacy reports. The column is `varchar(80)`.
+
+Both JSON `POST /reports/create` and multipart `POST /reports/create-with-photos` now require `title`: nonblank, one line, at most 80 UTF-16 code units. Invalid/missing/null/blank/oversized titles return 400 with Spanish validation messages before geocoding/uploading. Surrounding whitespace is trimmed before storage. Descriptions remain independent and optional. This intentionally changes creation requirements: old clients must be updated to submit a title.
+
+All report responses include nullable `title` (NULL only for legacy reports), including list, search, recommendations, details and writes returning a report. Search includes stored titles with existing parameterized ILIKE semantics; ranking and pagination remain unchanged. Existing authorization is preserved. No generated titles or title-edit endpoint is introduced. Frontend request/draft support is updated separately; the title-entry UI is the next stage. Until that UI exists, publishing without a title is rejected. Application startup never applies migrations automatically.

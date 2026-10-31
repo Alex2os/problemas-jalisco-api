@@ -6,6 +6,12 @@ namespace JaliscoProblemsAPI.DTOs.Reports;
 
 public sealed class CreateReportRequestDTO
 {
+    [JsonPropertyName("title")]
+    [Required(ErrorMessage = "Escribe un título para el reporte.")]
+    [MaxLength(80, ErrorMessage = "El título debe tener hasta 80 caracteres.")]
+    [RegularExpression(@"\A[^\r\n]*\z", ErrorMessage = "El título debe ocupar una sola línea.")]
+    public string Title { get; set; } = string.Empty;
+
     [JsonPropertyName("description")]
     [MaxLength(255, ErrorMessage = "La descripción introducida es muy larga.")]
     public string? Description { get; set; } = string.Empty;
