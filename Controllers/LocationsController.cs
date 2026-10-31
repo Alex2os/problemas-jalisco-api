@@ -25,4 +25,19 @@ public sealed class LocationsController(GeocodingService geocoding, ReportReposi
             location
         });
     }
+
+    [HttpGet("search")]
+    public async Task<IActionResult> Search([FromQuery] SearchLocationQuery request, CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(User.FindFirst("user_id")?.Value, out var userId)
+            || userId <= 0 || !await reports.UserExistsAsync(userId, cancellationToken))
+            return ApiErrors.Result(401, "Inicia sesión para continuar.");
+        var locations = await geocoding.SearchAsync(request.Query, cancellationToken);
+        return Ok(new
+        {
+            message = locations.Count > 0 ? "Las ubicaciones se obtuvieron con éxito." : "No se encontraron ubicaciones para esta búsqueda.",
+            locations
+        });
+    }
+
 }

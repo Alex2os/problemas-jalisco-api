@@ -18,6 +18,7 @@ public static class ReportCategories
         new("basura", "Basura acumulada", "Basura en vía pública, acumulación de desechos o falta de recolección."),
         new("seguridad", "Seguridad urbana", "Falta de vigilancia, luminarias apagadas en zonas de riesgo o situaciones inseguras."),
         new("arboles", "Árboles y parques", "Árboles en riesgo de caída, ramas caídas o mantenimiento de parques."),
+        new("semaforos", "Semáforos", "Semáforos apagados, dañados o con fallas de funcionamiento."),
         new("otro", "Otro problema", "Cualquier otra anomalía o problema urbano no contemplado en las categorías anteriores.")
     ];
 

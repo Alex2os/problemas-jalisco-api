@@ -20,10 +20,10 @@ public sealed class CategoryContractTests
     }
 
     [Fact]
-    public void ActiveCategoriesAreSevenAndOrderedCorrectly()
+    public void ActiveCategoriesAreEightAndOrderedCorrectly()
     {
         var active = ReportCategories.ActiveCategories;
-        Assert.Equal(7, active.Count);
+        Assert.Equal(8, active.Count);
 
         var expectedIds = new[]
         {
@@ -33,6 +33,7 @@ public sealed class CategoryContractTests
             "basura",
             "seguridad",
             "arboles",
+            "semaforos",
             "otro"
         };
 
@@ -80,6 +81,7 @@ public sealed class CategoryContractTests
     [InlineData("basura", true)]
     [InlineData("seguridad", true)]
     [InlineData("arboles", true)]
+    [InlineData("semaforos", true)]
     [InlineData("otro", true)]
     [InlineData("otros", true)] // Alias de compatibilidad permitido para creación
     [InlineData("accidente", false)]
@@ -130,6 +132,7 @@ public sealed class CategoryContractTests
         Assert.Equal("basura", ReportCategories.Normalize("basura"));
         Assert.Equal("seguridad", ReportCategories.Normalize("seguridad"));
         Assert.Equal("arboles", ReportCategories.Normalize("arboles"));
+        Assert.Equal("semaforos", ReportCategories.Normalize("semaforos"));
     }
 
     [Fact]
@@ -148,7 +151,7 @@ public sealed class CategoryContractTests
 
         var categoriesElement = json.GetProperty("categories");
         Assert.Equal(JsonValueKind.Array, categoriesElement.ValueKind);
-        Assert.Equal(7, categoriesElement.GetArrayLength());
+        Assert.Equal(8, categoriesElement.GetArrayLength());
 
         var first = categoriesElement[0];
         Assert.Equal("baches", first.GetProperty("id").GetString());

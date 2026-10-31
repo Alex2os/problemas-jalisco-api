@@ -35,6 +35,7 @@ Set secrets and environment before startup; the commands above contain no creden
 | --- | --- | --- | --- |
 | POST | `/auth/register` | Public | 200 `{ message }` |
 | POST | `/auth/login` | Public | 200 `{ message, token, user: { id, username, email } }` |
+| GET | `/locations/search?query=...` | Bearer | 200 `{ message, locations }`, up to five candidates |
 | GET | `/reports` | Public | 200 `{ message, reports }`, newest ID first |
 | GET | `/reports/search?query=...` | Public | 200 `{ message, reports }` |
 | GET | `/reports/{report_id}` | Public | 200 `{ message, report }` |
@@ -131,3 +132,11 @@ Apply `database/migrations/002_report_titles.sql` after 001 and **before startin
 Both JSON `POST /reports/create` and multipart `POST /reports/create-with-photos` now require `title`: nonblank, one line, at most 80 UTF-16 code units. Invalid/missing/null/blank/oversized titles return 400 with Spanish validation messages before geocoding/uploading. Surrounding whitespace is trimmed before storage. Descriptions remain independent and optional. This intentionally changes creation requirements: old clients must be updated to submit a title.
 
 All report responses include nullable `title` (NULL only for legacy reports), including list, search, recommendations, details and writes returning a report. Search includes stored titles with existing parameterized ILIKE semantics; ranking and pagination remain unchanged. Existing authorization is preserved. No generated titles or title-edit endpoint is introduced. Frontend request/draft support is updated separately; the title-entry UI is the next stage. Until that UI exists, publishing without a title is rejected. Application startup never applies migrations automatically.
+
+## Report category: Semáforos
+
+The official catalog now includes `semaforos` (`Semáforos`) for traffic lights that are off, damaged or malfunctioning. It is accepted by both JSON and multipart report creation and returned unchanged across report reads/search/recommendations. There are eight active categories. No database migration is needed: the existing `type varchar(20)` column supports the new ID without an enum or category constraint. Existing reports under `otro` are not reclassified. Restart the API and refresh the frontend catalog after deployment.
+
+## Report location search
+
+Authenticated `GET /locations/search?query=...` searches an address or place and returns up to five candidates for the report location step. It shares the existing geocoder's cache, outbound gate, timeout and per-user rate policy. No database migration is required. The frontend integration is a separate next stage. See [contract, provider restrictions, errors and tests](docs/location-search.md).

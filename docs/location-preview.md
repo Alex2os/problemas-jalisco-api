@@ -35,7 +35,7 @@ Explicit provider no-coverage responses (`Unable to geocode`, HTTP 200 or 404) r
 
 ## Shared geocoding and limits
 
-Preview and report creation use the same singleton service, exact-coordinate cache and global outbound gate. Successful structured results are cached in memory for 24 hours, explicit no-coverage for five minutes, with the existing 1,024-entry bound. Provider failures are not cached. Existing report creation still receives its formatted string, bounded to 255 Unicode characters, and still fails rather than inserting a fabricated address when lookup fails.
+Preview and report creation use the same singleton service, exact-coordinate cache and global outbound gate. Explicit [location search](location-search.md) also shares the bounded cache, outbound gate and per-user geocoding rate policy, with separate search cache keys. Successful structured results are cached in memory for 24 hours, explicit no-coverage for five minutes, with the existing 1,024-entry bound. Provider failures are not cached. Existing report creation still receives its formatted string, bounded to 255 Unicode characters, and still fails rather than inserting a fabricated address when lookup fails.
 
 `RateLimiting:GeocodingPermitLimit` (environment key `RateLimiting__GeocodingPermitLimit`) defaults to 30 requests per authenticated user per minute. It is separate from the write limiter; changing it does not increase provider throughput. Existing five-second provider timeout, three-second gate wait, cancellation and application-identifying User-Agent remain in place.
 

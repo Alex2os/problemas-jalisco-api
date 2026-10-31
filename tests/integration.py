@@ -98,6 +98,32 @@ class Geocoder(http.server.BaseHTTPRequestHandler):
         elif lat == '21.13':
             payload = {'display_name': 'Calle Morelos 10, Centro, Guadalajara', 'address': {
                 'road': 'Calle Morelos', 'house_number': '10', 'suburb': 'Centro', 'city': 'Guadalajara'}}
+        if urllib.parse.urlsplit(self.path).path == '/search':
+            search = query.get('q', [''])[0].casefold()
+            payload = [
+                {'name': 'Escuela Morelos', 'display_name': 'Escuela Morelos, Calle Morelos 10, Centro, Guadalajara',
+                 'lat': '20.67', 'lon': '-103.35', 'address': {'road': 'Calle Morelos', 'house_number': '10', 'suburb': 'Centro', 'city': 'Guadalajara'}},
+                {'display_name': 'Duplicado', 'lat': '20.67', 'lon': '-103.35'},
+                {'display_name': 'Fuera de límites', 'lat': '30', 'lon': '-103'},
+                {'display_name': 'Plaza, Tlaquepaque', 'lat': 20.64, 'lon': -103.29, 'address': {'town': 'Tlaquepaque'}}
+            ]
+            if search == 'sin coincidencias':
+                payload = []
+            elif search == 'fuera de cobertura':
+                payload = [{'display_name': 'Fuera de límites', 'lat': '30', 'lon': '-103'}]
+            elif search == 'proveedor caido':
+                status, payload = 503, {}
+            elif search == 'proveedor limitado':
+                status, payload = 429, {}
+            elif search == 'respuesta invalida':
+                payload = {}
+            elif search == 'busqueda lenta':
+                time.sleep(6)
+            elif search == 'recuperacion':
+                with self.server.lock:
+                    attempts = sum(call[1].get('q', [''])[0].casefold() == search for call in self.server.calls)
+                if attempts == 1:
+                    status, payload = 503, {}
         data = json.dumps(payload, ensure_ascii=False).encode()
         try:
             self.send_response(status)
@@ -181,6 +207,7 @@ class ApiIntegrationTests(unittest.TestCase):
             'JWT_KEY': cls.key, 'Jwt__Key': cls.key, 'Jwt__Issuer': 'test-issuer', 'Jwt__Audience': 'test-mobile',
             'Geocoding__BaseUrl': f'http://127.0.0.1:{cls.geocoder.server_port}/',
             'Logging__LogLevel__Default': 'Warning', 'RateLimiting__AuthPermitLimit': '1000', 'RateLimiting__WritePermitLimit': '1000',
+            'RateLimiting__GeocodingPermitLimit': '1000',
             'PhotoStorage__RootPath': str(cls.runtime / 'photos'),
             'Cors__AllowedOrigins__0': 'https://mobile.example.invalid',
         })
@@ -774,6 +801,89 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(values['description'], persisted['description'])
         self.assertIsNone(request(restarted, 'GET', '/reports/1')[1]['report']['title'])
         self.assertEqual(fields['title'], request(restarted, 'GET', f"/reports/{photo['report_id']}")[1]['report']['title'])
+
+
+    def test_21_semaforos_category_creation_and_reads(self):
+        status, catalog, _ = request(self.base, 'GET', '/reports/categories')
+        self.assertEqual(200, status)
+        self.assertEqual(8, len(catalog['categories']))
+        self.assertEqual('Semáforos', next(item for item in catalog['categories'] if item['id'] == 'semaforos')['name'])
+        values = {'title': 'Semáforo sin luz en el cruce', 'description': 'No enciende desde ayer.', 'type': 'semaforos', 'latitude': 20.6597, 'longitude': -103.3496}
+        self.problem(request(self.base, 'POST', '/reports/create', values), 401)
+        status, created, _ = request(self.base, 'POST', '/reports/create', values, self.token)
+        self.assertEqual(200, status)
+        report_id = created['report_id']
+        for path in [f'/reports/{report_id}', '/reports', '/reports/search?query=semaforos', '/reports/recommended?limit=50']:
+            status, body, _ = request(self.base, 'GET', path)
+            self.assertEqual(200, status)
+            report = body['report'] if 'report' in body else next(item for item in body['reports'] if item['id'] == report_id)
+            self.assertEqual('semaforos', report['type'])
+            self.assertEqual(values['title'], report['title'])
+        status, photo, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], values)
+        self.assertEqual(200, status)
+        self.assertEqual('semaforos', photo['report']['type'])
+        self.assertEqual(1, len(photo['report']['photos']))
+        restarted = self.start_api()
+        self.assertEqual('semaforos', request(restarted, 'GET', f'/reports/{report_id}')[1]['report']['type'])
+
+
+    def test_22_location_search_auth_validation_mapping_cache_and_recovery(self):
+        endpoint = '/locations/search'
+        valid = '?query=' + urllib.parse.quote('  Calle   Morelos  ')
+        self.problem(request(self.base, 'GET', endpoint + valid), 401)
+        self.problem(request(self.base, 'GET', endpoint + valid, token=self.jwt({'user_id': '999999'})), 401)
+        calls = len(self.geocoder.calls)
+        count = self.sql('SELECT count(*) FROM reports')
+        for query in ['', '?query=', '?query=%20%20%20', '?query=ab', '?query=%20a%20', '?query=' + 'x' * 201]:
+            body, _ = self.problem(request(self.base, 'GET', endpoint + query, token=self.token), 400)
+            self.assertIn('message', body)
+        self.assertEqual(calls, len(self.geocoder.calls))
+        status, body, headers = request(self.base, 'GET', endpoint + valid, token=self.token)
+        self.assertEqual(200, status)
+        self.assertIn('no-store', headers.get('Cache-Control', ''))
+        self.assertEqual(2, len(body['locations']))
+        first, second = body['locations']
+        self.assertEqual('Escuela Morelos', first['name'])
+        self.assertEqual(20.67, first['latitude'])
+        self.assertEqual(-103.35, first['longitude'])
+        self.assertEqual('Calle Morelos 10', first['address'])
+        self.assertEqual('Centro', first['colonia'])
+        self.assertEqual('Guadalajara', first['municipality'])
+        self.assertIsNone(second['street'])
+        self.assertIsNone(second['street_number'])
+        self.assertIsNone(second['colonia'])
+        self.assertEqual('Tlaquepaque', second['municipality'])
+        outbound = self.geocoder.calls[-1][1]
+        self.assertEqual(['Calle Morelos'], outbound['q'])
+        self.assertEqual(['mx'], outbound['countrycodes'])
+        self.assertEqual(['1'], outbound['bounded'])
+        self.assertEqual(['5'], outbound['limit'])
+        self.assertEqual(['-105.68,22.75,-101.50,18.92'], outbound['viewbox'])
+        self.assertEqual(body, request(self.base, 'GET', endpoint + '?query=calle%20morelos', token=self.token)[1])
+        self.assertEqual(calls + 1, len(self.geocoder.calls))
+        for query in ['sin coincidencias', 'fuera de cobertura']:
+            path = endpoint + '?query=' + urllib.parse.quote(query)
+            status, empty, _ = request(self.base, 'GET', path, token=self.token)
+            self.assertEqual(200, status)
+            self.assertEqual([], empty['locations'])
+            calls = len(self.geocoder.calls)
+            self.assertEqual(empty, request(self.base, 'GET', path, token=self.token)[1])
+            self.assertEqual(calls, len(self.geocoder.calls))
+        for query in ['proveedor caido', 'proveedor limitado', 'respuesta invalida', 'busqueda lenta']:
+            self.problem(request(self.base, 'GET', endpoint + '?query=' + urllib.parse.quote(query), token=self.token), 503)
+        path = endpoint + '?query=recuperacion'
+        self.problem(request(self.base, 'GET', path, token=self.token), 503)
+        status, recovered, _ = request(self.base, 'GET', path, token=self.token)
+        self.assertEqual(200, status)
+        self.assertEqual(2, len(recovered['locations']))
+        self.assertEqual(count, self.sql('SELECT count(*) FROM reports'))
+        # Search and reverse share one authenticated geocoding rate policy.
+        limited = self.start_api({'RateLimiting__GeocodingPermitLimit': '1'})
+        self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.token)[0])
+        rejected = request(limited, 'GET', '/locations/reverse?latitude=20.67&longitude=-103.35', token=self.token)
+        self.problem(rejected, 429)
+        self.assertIn('Retry-After', rejected[2])
+        self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.other_user())[0])
 
 
 if __name__ == '__main__':

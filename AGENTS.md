@@ -44,6 +44,18 @@ Prefer existing controllers, concrete repositories and focused services. Keep co
 - Return appropriate validation, unauthorized, forbidden, not-found and conflict responses. Do not expose stack traces or database details.
 - Document new or changed endpoints, authentication, parameters, response shapes and fallback behavior in README.md or the relevant docs file.
 
+## Report titles, search and categories
+
+- Both JSON `POST /reports/create` and multipart `POST /reports/create-with-photos` require a user-written `title`: nonblank, single line, at most 80 UTF-16 code units. Preserve Spanish validation errors and validation before geocoding or photo storage. Trim surrounding whitespace before persisting.
+- Titles are stored independently of descriptions and returned in the shared report model across lists, search, recommendations, details and writes returning reports. Descriptions remain optional with their existing 255-character limit.
+- The description-excerpt/computed-title experiment was reverted. Do not derive or backfill titles from descriptions. Legacy reports retain null titles and use the frontend's category-based fallback.
+- Migration `database/migrations/002_report_titles.sql` follows 001 and must run before the updated API. It adds `title varchar(80)` and a trigger requiring a nonblank single-line title on inserts or explicit title changes. Preserve unrelated updates to legacy reports with null titles. Keep both full schema scripts consistent and repeatable without rewriting existing data.
+- There is no title-edit endpoint. The frontend title input is implemented on Evidencia, with required-field validation and an 80-character counter; the review screen displays the entered title. Backend and client creation requests must continue to agree on the required field.
+- `/reports/search` matches `ubication`, `type`, `description` and stored `title` using parameterized PostgreSQL `ILIKE`. Preserve wildcard semantics, optional pagination, HTTP validation and null-description/title behavior. Do not claim frontend accent normalization also applies to PostgreSQL search.
+- Adding a column to `ReportSelect` requires updating `ReadReport` and the recommendation reader's following column indexes. Preserve ranking, recommendation reasons, photo mapping and viewer permissions.
+- The eight active categories are `baches`, `alumbrado`, `agua`, `basura`, `seguridad`, `arboles`, `semaforos`, `otro`, with existing legacy aliases. `semaforos` means Semáforos and needs no schema migration; preserve existing `otro` reports without reclassification. Banquetas y accesibilidad and a broader Señales category remain suggestions only. Do not add other categories or subcategories without a separate request.
+- The frontend deliberately uses short local category subtitles instead of the API's longer explanations. Do not change the public catalog contract merely to style category cards.
+
 ## Authentication and authorization
 
 - Derive user identity and ownership from validated JWT claims, never from client-provided user IDs.
@@ -75,6 +87,19 @@ Prefer existing controllers, concrete repositories and focused services. Keep co
 - Keep the separate per-user geocoding rate policy and existing configurable limit. Preserve application-wide provider throttling, request cancellation, bounded waits and timeouts. Process-local gates do not coordinate multiple API instances.
 - Device GPS permission is a frontend concern. Manual lookup must work without device-location access; do not add permission flags to the API contract.
 - Use fake geocoders in tests. Cover structured/partial results, no coverage, cache reuse with report creation, invalid/non-finite coordinates, authentication, timeout and rate-limit behavior.
+
+## Report location search
+
+- Authenticated `GET /locations/search?query=...` supports explicit user-submitted place/address searches for reporting. Read `docs/location-search.md` before changing the contract. Frontend integration is now implemented on the Ubicación step through `LocationSearch`, `SearchLocations` and `createLocationSearch`; preserve compatibility with that client.
+- Require an existing user, a nonblank query with at least three normalized characters and at most 200 raw UTF-16 code units, and return `{ message, locations }` with at most five named candidates and structured nullable address components. Preserve coordinates, provider ordering, deduplication and independent finite/bounds checks.
+- Keep empty matches (200 with an empty array) distinct from malformed/provider/timeout failures (503), authentication failures (401), invalid input (400) and application rate limits (429 with Retry-After). Do not invent missing address components or store searches/reports as a side effect.
+- Search shares `GeocodingService`, the bounded cache and outbound gate with reverse preview/report creation. Use separate normalized search cache keys; preserve successful/empty TTLs and uncached transient failures. Search must not populate reverse-coordinate cache entries from a candidate's address.
+- Preserve the configurable provider, one-request-per-second application limit, timeout, cancellation, per-user geocoding policy and attribution. Public Nominatim forbids autocomplete: the frontend searches only on an explicit Buscar/keyboard submit action. Do not add keystroke requests, location permission requirements or query-history persistence.
+- Keep fake-provider unit/integration coverage for mapping, no results, caching, authentication, malformed responses, retry recovery, timeout, rate limits and shared reverse/search throttling. Do not claim live-provider coverage from these tests.
+- The frontend shows the search bar above a taller map without the removed bold search label. Choosing a candidate moves the adjustable pin; live reverse-address preview and explicit GPS remain in place. Failed/empty searches preserve the selected point. Do not require device-location permission, confirmation of a candidate as a report, or search-history persistence in the backend contract.
+- Keep the client/server coordinate bounds aligned: latitude 18.92–22.75 and longitude -105.68–-101.50. This rectangle is not a municipality/state polygon check. Candidate addresses must not override the final adjusted pin or be written into the reverse-coordinate cache.
+- In the search action, keep the complex query DTO parameter named `request` (or explicitly configure binding). Naming it `query` collides with the public `?query=...` key and can cause valid requests to fail model binding. Test the real HTTP route, not only DTO validation.
+- Preserve the actual frontend service coverage in the disposable suite: an authenticated search, partial address fields, empty results and reverse lookup of the selected candidate. Do not infer live-provider accuracy or device interaction validation from those tests.
 
 ## Client-facing error behavior
 
@@ -127,6 +152,12 @@ Read the integration test prerequisites in README.md first. The suite requires a
 For frontend integration, set `JALISCO_TEST_FRONTEND_DIR` to the actual frontend checkout rather than relying on the legacy default directory name. The client scripts must reference current service filenames. Report skipped checks separately; do not call them passing checks.
 
 Add focused coverage for new behavior and meaningful regressions, including invalid input, permissions and fallback cases where relevant. Report checks that could not run and distinguish pre-existing failures from regressions. Documentation-only changes require review and git diff --check, not an application build.
+
+## Test-data SQL
+
+- When asked for copy-paste seed SQL, provide the script without executing it against the application database. A request for SQL is not authorization to run it.
+- Seed reports need valid titles, coherent title/description/category combinations and existing user IDs. Destructive replacement must explicitly identify removal of related likes, comments, photo records and status history while preserving users. SQL deletion does not remove uploaded photo files from disk.
+- For broadly spread map test data, use a grid with randomized positions rather than a single tight cluster. The latest requested area was an approximate urban ZMG rectangle (latitude 20.45–20.80, longitude -103.52–-103.15). Those are seed-data bounds, not a change to the API's Jalisco validation limits or a guarantee of street/municipal-boundary placement.
 
 ## Git and scope
 
