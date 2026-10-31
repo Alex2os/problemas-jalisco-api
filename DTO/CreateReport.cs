@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
+using JaliscoProblemsAPI.Infrastructure;
 
 namespace JaliscoProblemsAPI.DTOs.Reports;
 
@@ -12,6 +13,7 @@ public sealed class CreateReportRequestDTO
     [JsonPropertyName("type")]
     [Required(ErrorMessage = "Se necesita introducir un tipo de reporte.")]
     [MaxLength(20, ErrorMessage = "El tipo de reporte introducido es muy largo.")]
+    [ValidReportCategory]
     public string Type { get; set; } = string.Empty;
 
     [JsonPropertyName("latitude")]

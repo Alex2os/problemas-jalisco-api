@@ -16,6 +16,17 @@ namespace JaliscoProblemsAPI.Controllers;
 [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class ReportsController(ReportRepository reports, GeocodingService geocoding) : ControllerBase
 {
+    [AllowAnonymous]
+    [HttpGet("categories")]
+    public IActionResult GetCategories()
+    {
+        return Ok(new
+        {
+            message = "Las categorías se obtuvieron con éxito.",
+            categories = ReportCategories.ActiveCategories
+        });
+    }
+
     [Authorize]
     [EnableRateLimiting("write")]
     [HttpPost("create")]
@@ -27,7 +38,9 @@ public sealed class ReportsController(ReportRepository reports, GeocodingService
         var reportId = await reports.CreateReportAsync(new Report
         {
             UserId = userId, Latitude = request.Latitude, Longitude = request.Longitude,
-            Description = request.Description ?? string.Empty, Type = request.Type, Ubication = location
+            Description = request.Description ?? string.Empty,
+            Type = ReportCategories.Normalize(request.Type),
+            Ubication = location
         }, cancellationToken);
         return Ok(new { message = "El reporte se creó con éxito.", report_id = reportId });
     }

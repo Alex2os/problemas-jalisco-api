@@ -77,7 +77,7 @@ public sealed class ReportMediaController(ReportRepository reports, IReportPhoto
                 Latitude = request.Latitude,
                 Longitude = request.Longitude,
                 Description = request.Description ?? string.Empty,
-                Type = request.Type,
+                Type = ReportCategories.Normalize(request.Type),
                 Ubication = location
             }, stored, ct);
             return Ok(new { message = "Reporte y fotos publicados.", report_id = id, report = await reports.GetByIdAsync(id, UserId, ct) });

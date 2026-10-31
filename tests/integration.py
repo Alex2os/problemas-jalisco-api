@@ -150,7 +150,7 @@ class ApiIntegrationTests(unittest.TestCase):
         if status != 200:
             raise RuntimeError('Fixture login failed.')
         cls.token, cls.user_id = body['token'], body['user']['id']
-        request(cls.base, 'POST', '/reports/create', {'type': 'otros', 'latitude': 20.6597, 'longitude': -103.3496}, cls.token)
+        request(cls.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, cls.token)
         cls.report_id = request(cls.base, 'GET', '/reports')[1]['reports'][0]['id']
 
     @classmethod
@@ -229,7 +229,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(request(self.base, 'GET', '/not-an-endpoint'), 404)
 
     def test_02_authorization_and_identity_spoofing(self):
-        data = {'type': 'otros', 'latitude': 20.6597, 'longitude': -103.3496, 'user_id': 99999}
+        data = {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496, 'user_id': 99999}
         self.problem(request(self.base, 'POST', '/reports/create', data), 401)
         for token in ['malformed', self.jwt({'exp': int(time.time()) - 600}), self.jwt({'iss': 'wrong'}), self.jwt({'aud': 'wrong'}), self.jwt({'user_id': '-1'}), self.jwt({'user_id': 'not-a-number'}), self.jwt(key='different-test-key-at-least-32-bytes')]:
             self.problem(request(self.base, 'POST', '/reports/create', data, token), 401)
@@ -239,7 +239,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.assertEqual(self.user_id, item['user_id'])
 
     def test_03_validation_is_readable_by_expo(self):
-        invalid = {'type': 'otros', 'latitude': 0, 'longitude': -103}
+        invalid = {'type': 'otro', 'latitude': 0, 'longitude': -103}
         body, _ = self.problem(request(self.base, 'POST', '/reports/create', invalid, self.token), 400)
         self.assertIn('errors', body)
         self.problem(request(self.base, 'POST', '/auth/register', {'username': 'x' * 21, 'email': 'other@example.invalid', 'password': self.password}), 400)
@@ -298,14 +298,14 @@ class ApiIntegrationTests(unittest.TestCase):
         with self.geocoder.lock:
             before = len(self.geocoder.calls)
         for _ in range(2):
-            self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otros', 'latitude': 20.6597, 'longitude': -103.3496}, self.token)[0])
+            self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, self.token)[0])
         with self.geocoder.lock:
             self.assertEqual(before, len(self.geocoder.calls))
         count = int(self.sql('SELECT count(*) FROM reports'))
         for latitude in [21.123, 21.124, 21.126]:
-            self.problem(request(self.base, 'POST', '/reports/create', {'type': 'otros', 'latitude': latitude, 'longitude': -103}, self.token), 503)
+            self.problem(request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': latitude, 'longitude': -103}, self.token), 503)
         self.assertEqual(count, int(self.sql('SELECT count(*) FROM reports')))
-        self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otros', 'latitude': 21.125, 'longitude': -103}, self.token)[0])
+        self.assertEqual(200, request(self.base, 'POST', '/reports/create', {'type': 'otro', 'latitude': 21.125, 'longitude': -103}, self.token)[0])
         location = request(self.base, 'GET', '/reports')[1]['reports'][0]['ubication']
         self.assertEqual(255, len(location))
         self.assertNotIn('\uFFFD', location)
@@ -489,7 +489,7 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(request(self.base, 'PUT', '/reports/99999/status', {'status': 'resolved', 'expected_version': 0}, self.token), 404)
 
     def test_15_photos_atomic_create_limits_validation_and_persistence(self):
-        fields = {'type': 'otros', 'description': 'With real photos', 'latitude': 20.6597, 'longitude': -103.3496}
+        fields = {'type': 'otro', 'description': 'With real photos', 'latitude': 20.6597, 'longitude': -103.3496}
         self.problem(multipart(self.base, '/reports/create-with-photos', None, [png()], fields), 401)
         before = int(self.sql('SELECT count(*) FROM reports'))
         self.problem(multipart(self.base, '/reports/create-with-photos', self.token, [png(), b'not an image'], fields), 400)
@@ -545,7 +545,7 @@ class ApiIntegrationTests(unittest.TestCase):
         if not script.is_file() or not shutil.which('node'):
             self.skipTest('Mobile project/Node unavailable.')
         # Obtain real normalized JPEG bytes from the API, then use them as a native-selected file.
-        _, body, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], {'type':'otros','latitude':20.6597,'longitude':-103.3496})
+        _, body, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], {'type':'otro','latitude':20.6597,'longitude':-103.3496})
         photo = self.runtime / 'mobile-selected.jpg'
         with urllib.request.urlopen(self.base + body['report']['photos'][0]['url']) as response:
             photo.write_bytes(response.read())
@@ -576,10 +576,10 @@ class ApiIntegrationTests(unittest.TestCase):
             self.problem(request(self.base, 'GET', endpoint + query), 400)
 
         fixtures = [
-            ('rec-related', 20.67, -103.35, 'reported', self.user_id),
-            ('rec-unrelated', 20.67, -103.35, 'reported', 1),
-            ('rec-related', 22.0, -103.35, 'reported', 1),
-            ('rec-unrelated', 20.67, -103.35, 'resolved', 1),
+            ('baches', 20.67, -103.35, 'reported', self.user_id),
+            ('alumbrado', 20.67, -103.35, 'reported', 1),
+            ('baches', 22.0, -103.35, 'reported', 1),
+            ('alumbrado', 20.67, -103.35, 'resolved', 1),
         ]
         ids = []
         for index, (category, lat, lon, status, owner) in enumerate(fixtures):

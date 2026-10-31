@@ -80,7 +80,7 @@ public sealed class ContractTests
     [InlineData(double.NaN, -103, false)]
     public void ReportCoordinatesRetainJaliscoBounds(double latitude, double longitude, bool valid)
     {
-        Assert.Equal(valid, Valid(new CreateReportRequestDTO { Type = "otros", Latitude = latitude, Longitude = longitude, Description = null }));
+        Assert.Equal(valid, Valid(new CreateReportRequestDTO { Type = "otro", Latitude = latitude, Longitude = longitude, Description = null }));
     }
 
     [Fact]
