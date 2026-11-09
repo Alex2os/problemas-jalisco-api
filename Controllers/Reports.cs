@@ -62,6 +62,39 @@ public sealed class ReportsController(ReportRepository reports, GeocodingService
         return Ok(new { message = "Los reportes se obtuvieron con éxito.", reports = items });
     }
 
+    [Authorize]
+    [HttpGet("saved")]
+    public async Task<IActionResult> GetSavedReports([FromQuery, Range(1, 200)] int limit = 20,
+        [FromQuery, Range(1, int.MaxValue)] int? beforeId = null, CancellationToken cancellationToken = default)
+    {
+        if (!TryGetUserId(out var userId) || !await reports.UserExistsAsync(userId, cancellationToken))
+            return ApiErrors.Result(401, "El usuario no está autenticado.");
+        var items = await reports.GetReportsAsync(null, limit + 1, beforeId, userId, cancellationToken, savedOnly: true);
+        var hasMore = items.Count > limit;
+        if (hasMore) items.RemoveAt(items.Count - 1);
+        return Ok(new
+        {
+            message = "Los reportes guardados se obtuvieron con éxito.", reports = items,
+            has_more = hasMore, next_before_id = hasMore ? (int?)items[^1].Id : null
+        });
+    }
+
+    [Authorize, EnableRateLimiting("write"), HttpPut("{report_id}/saved")]
+    public Task<IActionResult> SaveReport([Range(1, int.MaxValue)] int report_id, CancellationToken cancellationToken)
+        => ChangeSaved(report_id, true, cancellationToken);
+
+    [Authorize, EnableRateLimiting("write"), HttpDelete("{report_id}/saved")]
+    public Task<IActionResult> UnsaveReport([Range(1, int.MaxValue)] int report_id, CancellationToken cancellationToken)
+        => ChangeSaved(report_id, false, cancellationToken);
+
+    private async Task<IActionResult> ChangeSaved(int reportId, bool saved, CancellationToken ct)
+    {
+        if (!TryGetUserId(out var userId) || !await reports.UserExistsAsync(userId, ct))
+            return ApiErrors.Result(401, "El usuario no está autenticado.");
+        await reports.SetSavedAsync(reportId, userId, saved, ct);
+        return Ok(new { message = saved ? "Reporte guardado." : "Reporte eliminado de guardados.", report_id = reportId, saved_by_me = saved });
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> GetFilteredReports([FromQuery, Required, StringLength(255)] string query,
         [FromQuery, Range(1, 200)] int? limit, [FromQuery, Range(1, int.MaxValue)] int? beforeId, CancellationToken cancellationToken)

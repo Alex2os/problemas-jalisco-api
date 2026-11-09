@@ -171,6 +171,9 @@ class ApiIntegrationTests(unittest.TestCase):
         title_migration = (ROOT / 'database/migrations/002_report_titles.sql').read_text()
         cls.sql(title_migration)
         cls.sql(title_migration)
+        saved_migration = (ROOT / 'database/migrations/003_saved_reports.sql').read_text()
+        cls.sql(saved_migration)
+        cls.sql(saved_migration)
         if cls.sql('SELECT title IS NULL FROM reports WHERE id=1') != 't':
             raise RuntimeError('Title migration must preserve the legacy NULL title.')
         cls.geocoder = http.server.ThreadingHTTPServer(('127.0.0.1', 0), Geocoder)
@@ -884,6 +887,106 @@ class ApiIntegrationTests(unittest.TestCase):
         self.problem(rejected, 429)
         self.assertIn('Retry-After', rejected[2])
         self.assertEqual(200, request(limited, 'GET', endpoint + valid, token=self.other_user())[0])
+
+
+    def test_23_delete_own_report(self):
+        values = {'title': 'Reporte para eliminar', 'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}
+        status, created, _ = multipart(self.base, '/reports/create-with-photos', self.token, [png()], values)
+        self.assertEqual(200, status)
+        report_id = created['report_id']
+        endpoint = f'/reports/{report_id}'
+        other = self.other_user()
+        photo_id = created['report']['photos'][0]['id']
+        keys = set((self.runtime / 'photos').glob('*.jpg'))
+        self.assertEqual(200, request(self.base, 'PUT', endpoint + '/like', token=other)[0])
+        self.assertEqual(200, request(self.base, 'POST', endpoint + '/comments', {'user_comment': 'Comentario ajeno'}, other)[0])
+        self.problem(request(self.base, 'DELETE', endpoint), 401)
+        self.problem(request(self.base, 'DELETE', endpoint, token=self.jwt({'user_id': '999999'})), 401)
+        self.problem(request(self.base, 'DELETE', endpoint, token=other), 403)
+        self.assertEqual(200, request(self.base, 'GET', endpoint)[0])
+        self.assertEqual(keys, set((self.runtime / 'photos').glob('*.jpg')))
+        for invalid in ['0', '-1', 'abc', '2147483648']:
+            self.problem(request(self.base, 'DELETE', '/reports/' + invalid, token=self.token), 400)
+        status, body, headers = request(self.base, 'DELETE', endpoint, token=self.token)
+        self.assertEqual(200, status)
+        self.assertEqual({'message': 'Reporte eliminado.', 'report_id': report_id}, body)
+        self.assertIn('no-store', headers.get('Cache-Control', ''))
+        for table in ['reports', 'likes', 'comments', 'report_status_history', 'report_images']:
+            column = 'id' if table == 'reports' else 'report_id'
+            self.assertEqual('0', self.sql(f'SELECT count(*) FROM {table} WHERE {column}={report_id}'))
+        self.assertEqual(1, len(keys - set((self.runtime / 'photos').glob('*.jpg'))))
+        for path in [endpoint, endpoint + '/comments', endpoint + '/status/history', endpoint + f'/photos/{photo_id}/content']:
+            self.problem(request(self.base, 'GET', path), 404)
+        self.problem(request(self.base, 'DELETE', endpoint, token=self.token), 404)
+        self.assertFalse(any(item['id'] == report_id for item in request(self.base, 'GET', '/reports')[1]['reports']))
+        self.problem(request(self.start_api(), 'GET', endpoint), 404)
+        # Text-only reports and concurrent duplicate deletes follow the same ownership contract.
+        status, created, _ = request(self.base, 'POST', '/reports/create', values, self.token)
+        self.assertEqual(200, status)
+        endpoint = f"/reports/{created['report_id']}"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            statuses = list(pool.map(lambda _: request(self.base, 'DELETE', endpoint, token=self.token)[0], range(2)))
+        self.assertEqual([200, 404], sorted(statuses))
+
+
+
+    def test_24_saved_reports_private_idempotent_persisted_and_paginated(self):
+        other = self.other_user()
+        ids = []
+        for _ in range(3):
+            status, created, _ = request(self.base, 'POST', '/reports/create',
+                {'title': 'Para guardar', 'type': 'otro', 'latitude': 20.6597, 'longitude': -103.3496}, self.token)
+            self.assertEqual(200, status)
+            ids.append(created['report_id'])
+        for method, path in [('GET', '/reports/saved'), ('PUT', f'/reports/{ids[0]}/saved'), ('DELETE', f'/reports/{ids[0]}/saved')]:
+            self.problem(request(self.base, method, path), 401)
+            self.problem(request(self.base, method, path, token=self.jwt({'user_id': '999999'})), 401)
+        self.assertEqual([], request(self.base, 'GET', '/reports/saved', token=other)[1]['reports'])
+        for report_id in ids:
+            for _ in range(2):
+                status, body, _ = request(self.base, 'PUT', f'/reports/{report_id}/saved', {'user_id': 999999}, other)
+                self.assertEqual(200, status)
+                self.assertTrue(body['saved_by_me'])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            statuses = list(pool.map(lambda _: request(self.base, 'PUT', f'/reports/{ids[0]}/saved', token=other)[0], range(8)))
+        self.assertEqual([200] * 8, statuses)
+        self.assertEqual('3', self.sql('SELECT count(*) FROM saved_reports'))
+        for query in ['?limit=0', '?limit=201', '?beforeId=0', '?beforeId=abc']:
+            self.problem(request(self.base, 'GET', '/reports/saved' + query, token=other), 400)
+        for method in ['PUT', 'DELETE']:
+            self.problem(request(self.base, method, '/reports/0/saved', token=other), 400)
+            self.problem(request(self.base, method, '/reports/999999/saved', token=other), 404)
+        status, page, headers = request(self.base, 'GET', '/reports/saved?limit=2', token=other)
+        self.assertEqual(200, status)
+        self.assertIn('no-store', headers.get('Cache-Control', ''))
+        self.assertEqual(ids[::-1][:2], [item['id'] for item in page['reports']])
+        self.assertTrue(page['has_more'])
+        self.assertTrue(all(item['saved_by_me'] for item in page['reports']))
+        last = request(self.base, 'GET', f"/reports/saved?limit=2&beforeId={page['next_before_id']}", token=other)[1]
+        self.assertEqual([ids[0]], [item['id'] for item in last['reports']])
+        self.assertFalse(last['has_more'])
+        self.assertIsNone(last['next_before_id'])
+        self.assertEqual([], request(self.base, 'GET', '/reports/saved', token=self.token)[1]['reports'])
+        for token, expected in [(None, False), (self.token, False), (other, True)]:
+            for path in [f'/reports/{ids[0]}', '/reports', '/reports/search?query=Para', '/reports/recommended?limit=50']:
+                body = request(self.base, 'GET', path, token=token)[1]
+                report = body['report'] if 'report' in body else next(item for item in body['reports'] if item['id'] == ids[0])
+                self.assertEqual(expected, report['saved_by_me'])
+        self.sql((ROOT / 'database/migrations/003_saved_reports.sql').read_text())
+        restarted = self.start_api()
+        self.assertEqual(3, len(request(restarted, 'GET', '/reports/saved', token=other)[1]['reports']))
+        for _ in range(2):
+            status, body, _ = request(self.base, 'DELETE', f'/reports/{ids[0]}/saved', token=other)
+            self.assertEqual(200, status)
+            self.assertFalse(body['saved_by_me'])
+        self.assertEqual(200, request(self.base, 'PUT', f'/reports/{ids[1]}/saved', token=self.token)[0])
+        self.assertEqual(200, request(self.base, 'DELETE', f'/reports/{ids[1]}', token=self.token)[0])
+        self.assertEqual('0', self.sql(f'SELECT count(*) FROM saved_reports WHERE report_id={ids[1]}'))
+        self.assertEqual([ids[2]], [item['id'] for item in request(self.base, 'GET', '/reports/saved', token=other)[1]['reports']])
+        limited = self.start_api({'RateLimiting__WritePermitLimit': '1'})
+        self.assertEqual(200, request(limited, 'PUT', f'/reports/{ids[2]}/saved', token=other)[0])
+        self.problem(request(limited, 'DELETE', f'/reports/{ids[2]}/saved', token=other), 429)
+
 
 
 if __name__ == '__main__':

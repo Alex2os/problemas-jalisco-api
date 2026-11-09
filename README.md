@@ -140,3 +140,41 @@ The official catalog now includes `semaforos` (`Semáforos`) for traffic lights 
 ## Report location search
 
 Authenticated `GET /locations/search?query=...` searches an address or place and returns up to five candidates for the report location step. It shares the existing geocoder's cache, outbound gate, timeout and per-user rate policy. No database migration is required. The frontend integration is a separate next stage. See [contract, provider restrictions, errors and tests](docs/location-search.md).
+
+### Eliminar un reporte propio
+
+`DELETE /reports/{report_id}` requiere JWT de un usuario existente y aplica el límite de escrituras.
+La autoría se obtiene exclusivamente del token; no acepta un ID de usuario del cliente.
+Devuelve `200 { "message": "Reporte eliminado.", "report_id": 123 }`, `400` para IDs inválidos,
+`401` sin autenticación válida, `403` si el reporte pertenece a otro usuario, `404` si no existe
+(incluido repetir una eliminación) o `429` al superar el límite.
+Los errores conservan ProblemDetails y `message` en español.
+
+La eliminación es permanente: reporte, apoyos, comentarios de todos los usuarios, historial de estados
+y registros de fotos se eliminan en una sola transacción con bloqueo del reporte. No requiere migración.
+Los archivos se borran después del commit confirmado; un fallo del sistema de archivos se registra y
+puede dejar archivos huérfanos inaccesibles que requieren limpieza operativa. Un commit incierto conserva
+los archivos. No reintentar automáticamente tras perder la respuesta; consultar primero el reporte.
+
+## Reportes guardados (privados)
+
+Aplicar `database/migrations/003_saved_reports.sql` después de 001 y 002 **antes de desplegar la API**.
+Los dos scripts completos de esquema también incluyen esta tabla. La migración es aditiva y repetible.
+No se ha aplicado a la base de datos de la aplicación; las pruebas usan PostgreSQL desechable.
+
+Todos estos endpoints requieren JWT de un usuario existente, derivado exclusivamente del token:
+
+- `PUT /reports/{report_id}/saved`: guardar cualquier reporte existente, propio o ajeno.
+- `DELETE /reports/{report_id}/saved`: quitarlo de tus guardados.
+- `GET /reports/saved?limit=20&beforeId=123`: lista privada, ordenada por ID del reporte descendente
+  (no por fecha de guardado), con `limit` entre 1 y 200 y cursor `beforeId` positivo opcional.
+  Respuesta `200 { message, reports, has_more, next_before_id }`; sin resultados devuelve `[]` y cursor null.
+
+Las escrituras son idempotentes, aplican el límite de escrituras y devuelven
+`200 { message, report_id, saved_by_me }`. Errores: `400` parámetros inválidos, `401` usuario inválido,
+`404` reporte inexistente y `429` límite excedido. Conservan ProblemDetails y mensajes en español.
+Todas las respuestas de reportes agregan `saved_by_me` (false para invitados) y mantienen `no-store`.
+No hay conteos públicos ni acceso a los guardados de otra persona mediante un ID enviado por el cliente.
+Guardar no altera apoyos, estados ni recomendaciones. La clave compuesta evita duplicados concurrentes;
+el borrado del reporte elimina sus guardados por FK en la misma transacción. La paginación no representa
+una instantánea: cambios en la colección pueden afectar páginas posteriores.

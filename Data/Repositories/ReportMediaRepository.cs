@@ -110,6 +110,35 @@ public sealed partial class ReportRepository
         }
     }
 
+    public async Task<List<string>> DeleteReportAsync(int id, int user, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        await LockOwnerAsync(connection, transaction, id, user, ct);
+        var keys = new List<string>();
+        await using (var photos = new NpgsqlCommand("DELETE FROM report_images WHERE report_id=$1 RETURNING storage_key", connection, transaction))
+        {
+            photos.Parameters.AddWithValue(id);
+            await using var reader = await photos.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct)) keys.Add(reader.GetString(0));
+        }
+        // Explicit cleanup preserves the existing schema and commits all related deletions together.
+        foreach (var sql in new[]
+        {
+            "DELETE FROM likes WHERE report_id=$1",
+            "DELETE FROM comments WHERE report_id=$1",
+            "DELETE FROM report_status_history WHERE report_id=$1",
+            "DELETE FROM reports WHERE id=$1"
+        })
+        {
+            await using var cmd = new NpgsqlCommand(sql, connection, transaction);
+            cmd.Parameters.AddWithValue(id);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        await transaction.CommitAsync(ct);
+        return keys;
+    }
+
     public async Task<string> DeletePhotoAsync(int id, int photo, int user, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct);

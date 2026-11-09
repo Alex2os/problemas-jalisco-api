@@ -22,6 +22,9 @@ public sealed class ReportWithUsername : Report
     [JsonPropertyName("comment_count")]
     public long CommentCount { get; set; }
 
+    [JsonPropertyName("saved_by_me")]
+    public bool SavedByMe { get; set; }
+
     [JsonPropertyName("liked_by_me")]
     public bool LikedByMe { get; set; }
 }

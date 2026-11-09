@@ -98,6 +98,16 @@ public sealed class ReportMediaController(ReportRepository reports, IReportPhoto
         return Ok(new { message = "Fotos guardadas.", report = await reports.GetByIdAsync(report_id, UserId, ct) });
     }
 
+    [Authorize, EnableRateLimiting("write"), HttpDelete("{report_id}")]
+    public async Task<IActionResult> DeleteReport([Range(1, int.MaxValue)] int report_id, CancellationToken ct)
+    {
+        await RequireUserAsync(ct);
+        var keys = await reports.DeleteReportAsync(report_id, UserId, ct);
+        // Only remove files after a confirmed commit, independently of request cancellation.
+        foreach (var key in keys) storage.Delete(key);
+        return Ok(new { message = "Reporte eliminado.", report_id });
+    }
+
     [Authorize, EnableRateLimiting("write"), HttpDelete("{report_id}/photos/{photo_id}")]
     public async Task<IActionResult> Delete([Range(1, int.MaxValue)] int report_id, [Range(1, int.MaxValue)] int photo_id, CancellationToken ct)
     {

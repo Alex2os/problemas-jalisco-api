@@ -11,7 +11,8 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
             r.status, r.status_updated_at, r.status_version, r.user_id = $1,
             COALESCE((SELECT jsonb_agg(jsonb_build_object('id',i.id,'url','/reports/'||r.id||'/photos/'||i.id||'/content',
                 'display_order',i.display_order,'created_at',i.created_at) ORDER BY i.display_order)
-                FROM report_images i WHERE i.report_id = r.id),'[]'::jsonb)::text, r.title
+                FROM report_images i WHERE i.report_id = r.id),'[]'::jsonb)::text, r.title,
+            EXISTS (SELECT 1 FROM saved_reports s WHERE s.report_id = r.id AND s.user_id = $1) AS saved_by_me
         FROM reports r JOIN users u ON u.id = r.user_id
         LEFT JOIN (SELECT report_id, count(*) AS like_count FROM likes GROUP BY report_id) l ON l.report_id = r.id
         LEFT JOIN (SELECT report_id, count(*) AS comment_count FROM comments GROUP BY report_id) c ON c.report_id = r.id
@@ -57,10 +58,11 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         return await reader.ReadAsync(cancellationToken) ? ReadReport(reader) : null;
     }
 
-    public async Task<List<ReportWithUsername>> GetReportsAsync(string? query, int? limit, int? beforeId, int? viewerId, CancellationToken cancellationToken)
+    public async Task<List<ReportWithUsername>> GetReportsAsync(string? query, int? limit, int? beforeId, int? viewerId, CancellationToken cancellationToken, bool savedOnly = false)
     {
         // Optional pagination is additive: omitted parameters preserve the full map/list response.
         var sql = ReportSelect + " WHERE TRUE";
+        if (savedOnly) sql += " AND EXISTS (SELECT 1 FROM saved_reports s WHERE s.report_id = r.id AND s.user_id = $1)";
         await using var command = dataSource.CreateCommand();
         command.Parameters.AddWithValue(viewerId ?? 0);
         if (query is not null)
@@ -137,7 +139,8 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         Status = reader.GetString(12), StatusUpdatedAt = reader.GetDateTime(13), StatusVersion = reader.GetInt32(14),
         CanManage = reader.GetBoolean(15),
         Photos = System.Text.Json.JsonSerializer.Deserialize<List<ReportPhoto>>(reader.GetString(16)) ?? [],
-        Title = reader.IsDBNull(17) ? null : reader.GetString(17)
+        Title = reader.IsDBNull(17) ? null : reader.GetString(17),
+        SavedByMe = reader.GetBoolean(18)
     };
 
     private static CommentWithUsername ReadComment(NpgsqlDataReader reader, int? viewerId) => new()
@@ -161,6 +164,27 @@ public sealed partial class ReportRepository(NpgsqlDataSource dataSource)
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         if (!await reader.ReadAsync(cancellationToken)) return null;
         return new ReportInteractions { ReportId = reader.GetInt32(0), LikeCount = reader.GetInt64(1), CommentCount = reader.GetInt64(2), LikedByMe = reader.GetBoolean(3) };
+    }
+
+    public async Task SetSavedAsync(int reportId, int userId, bool saved, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct);
+        await using var transaction = await connection.BeginTransactionAsync(ct);
+        // Serialize saves/removals with each other and report deletion; never recreate a deleted report.
+        await using (var lookup = new NpgsqlCommand("SELECT id FROM reports WHERE id=$1 FOR UPDATE", connection, transaction))
+        {
+            lookup.Parameters.AddWithValue(reportId);
+            if (await lookup.ExecuteScalarAsync(ct) is null)
+                throw new JaliscoProblemsAPI.Infrastructure.ReportOperationException(404, "El reporte no existe.");
+        }
+        var sql = saved
+            ? "INSERT INTO saved_reports(user_id,report_id) VALUES($1,$2) ON CONFLICT (user_id,report_id) DO NOTHING"
+            : "DELETE FROM saved_reports WHERE user_id=$1 AND report_id=$2";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue(userId);
+        command.Parameters.AddWithValue(reportId);
+        await command.ExecuteNonQueryAsync(ct);
+        await transaction.CommitAsync(ct);
     }
 
     public async Task SetLikeAsync(int reportId, int userId, bool liked, CancellationToken cancellationToken)
